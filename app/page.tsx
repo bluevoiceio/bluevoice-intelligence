@@ -1,5 +1,5 @@
-import { Explorer } from "@/components/Explorer";
+import { AppView } from "@/components/AppView";
 
 export default function Page() {
-  return <Explorer />;
+  return <AppView />;
 }

@@ -20,7 +20,7 @@ import { fmt } from "@/lib/format";
 import type { MapView } from "@/lib/query";
 import { cn } from "@/lib/utils";
 
-export function Explorer() {
+export function Explorer({ headerExtra }: { headerExtra?: React.ReactNode } = {}) {
   const { filters, update, hydrated } = useFilters();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -67,6 +67,7 @@ export function Explorer() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {headerExtra}
           <Badge variant="secondary" className="gap-1.5">
             <span className="size-1.5 rounded-full bg-muted-foreground" />
             Amplitude · Blue Voice App
