@@ -45,4 +45,13 @@ describe("generateBrief", () => {
     });
     expect(text).toContain("No agencies crossed the decline threshold");
   });
+
+  it("uses singular wording for a single at-risk agency", () => {
+    const text = generateBrief({
+      ...summary,
+      atRiskCount: 1,
+      topDecliners: [agency("Solo PD", -30)],
+    });
+    expect(text).toContain("1 agency needs attention");
+  });
 });

@@ -126,4 +126,12 @@ describe("aggregateStateDept", () => {
     expect(out).toContainEqual({ state: "(none)", department: "Quincy PD", total: 7 });
     expect(out).toContainEqual({ state: "Massachusetts", department: "Holyoke", total: 279 });
   });
+
+  it("sums rows that share the same state and department", () => {
+    const out = aggregateStateDept([
+      { parts: ["Massachusetts", "Quincy PD"], total: 100, series: [] },
+      { parts: ["Massachusetts", "Quincy PD"], total: 50, series: [] },
+    ]);
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
+  });
 });
