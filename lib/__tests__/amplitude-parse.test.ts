@@ -134,4 +134,19 @@ describe("aggregateStateDept", () => {
     ]);
     expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
   });
+
+  // Amplitude actually returns a two-dimension group-by as a single joined
+  // label ("State; Department"), not a [state, department] array — this is the
+  // shape the live endpoint produces, so it must be split correctly.
+  it("splits Amplitude's joined 'State; Department' label", () => {
+    const out = aggregateStateDept([
+      { parts: ["Colorado; Castle Rock PD"], total: 203, series: [] },
+      { parts: ["Nebraska; La Vista City PD"], total: 214, series: [] },
+      { parts: ["Massachusetts; Quincy PD"], total: 100, series: [] },
+      { parts: ["Massachusetts; Quincy PD"], total: 50, series: [] }, // dedup on the split key
+    ]);
+    expect(out).toContainEqual({ state: "Colorado", department: "Castle Rock PD", total: 203 });
+    expect(out).toContainEqual({ state: "Nebraska", department: "La Vista City PD", total: 214 });
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
+  });
 });
