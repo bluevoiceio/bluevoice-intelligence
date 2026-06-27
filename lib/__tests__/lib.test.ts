@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildApiQuery, isTestDepartment, rangeToDates, type Filters } from "@/lib/query";
+import { buildApiQuery, isTestDepartment, rangeToDates, trailingWindow, type Filters } from "@/lib/query";
 import { makeColorScale, MAP_COLOR_EMPTY, uspsFor } from "@/lib/states";
 
 describe("isTestDepartment", () => {
@@ -26,6 +26,22 @@ describe("rangeToDates", () => {
     expect(start).toMatch(/^\d{8}$/);
     expect(end).toMatch(/^\d{8}$/);
     expect(Number(start)).toBeLessThan(Number(end));
+  });
+});
+
+describe("trailingWindow", () => {
+  it("produces YYYYMMDD bounds with start before end", () => {
+    const { start, end } = trailingWindow(30, 0);
+    expect(start).toMatch(/^\d{8}$/);
+    expect(end).toMatch(/^\d{8}$/);
+    expect(Number(start)).toBeLessThan(Number(end));
+  });
+
+  it("offsets the whole window backwards so prior ends where current starts", () => {
+    const current = trailingWindow(30, 0);
+    const prior = trailingWindow(30, 30);
+    expect(Number(prior.start)).toBeLessThan(Number(current.start));
+    expect(Number(prior.end)).toBeLessThanOrEqual(Number(current.start));
   });
 });
 

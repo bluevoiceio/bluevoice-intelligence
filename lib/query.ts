@@ -69,6 +69,25 @@ export function rangeToDates(range: TimeRange): { start: string; end: string } {
   return { start: formatAmplitudeDate(startDate), end: formatAmplitudeDate(now) };
 }
 
+/**
+ * A trailing N-day window in YYYYMMDD, optionally shifted back by `offsetDays`.
+ * trailingWindow(30, 0) = the last 30 days; trailingWindow(30, 30) = the 30
+ * days before that. Used for month-over-month comparison.
+ */
+export function trailingWindow(
+  days: number,
+  offsetDays = 0,
+): { start: string; end: string } {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const endDate = new Date(now - offsetDays * day);
+  const startDate = new Date(now - (offsetDays + days) * day);
+  return {
+    start: formatAmplitudeDate(startDate),
+    end: formatAmplitudeDate(endDate),
+  };
+}
+
 /** Build the query string the client sends to our own /api/* routes. */
 export function buildApiQuery(filters: Filters): string {
   const params = new URLSearchParams({
