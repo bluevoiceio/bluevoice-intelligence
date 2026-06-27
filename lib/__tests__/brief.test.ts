@@ -7,11 +7,13 @@ function agency(department: string, deltaPct: number | null) {
   return {
     department,
     state: "Massachusetts",
+    usps: "MA",
     current: 1,
     prior: 1,
     deltaAbs: -1,
     deltaPct,
     status: "decliner" as const,
+    score: 30,
   };
 }
 
