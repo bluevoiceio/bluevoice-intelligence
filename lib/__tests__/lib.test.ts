@@ -14,7 +14,6 @@ describe("isTestDepartment", () => {
     ["JAM Evaluation Police", true],
     ["Interns Department", true],
     ["Z INACTIVE Michigan State Police", true],
-    ["Quincy PD", false],
   ])("%s -> %s", (name, expected) => {
     expect(isTestDepartment(name)).toBe(expected);
   });

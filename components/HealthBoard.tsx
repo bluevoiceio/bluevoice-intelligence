@@ -40,7 +40,7 @@ export function filterAgencies(
 
 const STATUS_META: Record<
   HealthStatus,
-  { label: string; variant: "warning" | "success" | "secondary" | "default" }
+  { label: string; variant: "warning" | "success" | "secondary" }
 > = {
   decliner: { label: "At risk", variant: "warning" },
   riser: { label: "Rising", variant: "success" },

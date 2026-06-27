@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
     ]);
 
     const { agencies, summary } = computeHealth(current, prior, {
-      hideTest,
       ...HEALTH_DEFAULTS,
+      hideTest,
     });
 
     // Summary + brief always reflect the full picture; state only narrows rows.
