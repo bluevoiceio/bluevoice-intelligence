@@ -15,7 +15,7 @@ export interface AgencyHealth {
   current: number;
   prior: number;
   deltaAbs: number;
-  /** null when prior is 0 (a new/activated agency) — never shown as a %. */
+  /** null when prior volume is below the floor (sub-floor % is meaningless / new-or-activated agency) — never shown as a %. */
   deltaPct: number | null;
   status: HealthStatus;
 }
