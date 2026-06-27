@@ -157,8 +157,15 @@ export function computeHealth(
   `Z INACTIVE Michigan State Police`). This also cleans the existing Explorer's
   department drill-down (same helper), a small in-scope improvement. Re-run the
   existing `lib.test.ts` cases for the regex after extending.
-- If a department appears under multiple states across the two windows, fold to a
-  single agency row and attribute it to its **highest-volume** state.
+- **Key each agency by `(state, department)`.** In the Blue Voice model one
+  agency maps to exactly one state, so the same department name under two
+  different states is two *different* agencies and must never be merged (law-
+  enforcement town names collide constantly — Lakewood, Franklin, Springfield).
+  Rows whose `State` is `(none)` (untagged) are excluded from the board, mirroring
+  the choropleth's untagged-exclusion; `State` is reliably populated on
+  `New Question Asked`, so this drops negligible volume. (Decision 2026-06-26,
+  reversing an earlier "fold to dominant state" draft, which would have merged
+  distinct same-named agencies.)
 
 ### 4.4 `lib/brief.ts` (new, deterministic)
 ```ts
