@@ -4,6 +4,7 @@ import {
   aggregateBreakdown,
   aggregateGeo,
   aggregateStateDept,
+  aggregateStateDeptWeekly,
   parseSegmentation,
   sum,
   type GeoAggregate,
@@ -168,7 +169,7 @@ export async function getTrend(
 /** Per-(state,department) totals for one window — powers the health board. */
 export async function getAgencyTotals(
   window: { start: string; end: string },
-  opts: { event: string; metric: Metric; env: Environment },
+  opts: { event: string; metric: Metric; env: Environment; role?: Role },
 ): Promise<StateDeptTotal[]> {
   const raw = await segmentation({
     event: opts.event,
@@ -176,7 +177,27 @@ export async function getAgencyTotals(
     start: window.start,
     end: window.end,
     env: opts.env,
+    role: opts.role,
     groupBy: ["State", "Department"],
   });
   return aggregateStateDept(parseSegmentation(raw).parsed);
+}
+
+/**
+ * Per-(state,department) WEEKLY series over a window — powers the health-board
+ * sparklines/slopegraphs. Daily interval is bucketed into `weeks` trailing weeks.
+ */
+export async function getAgencyWeeklySeries(
+  window: { start: string; end: string },
+  opts: { event: string; env: Environment; weeks?: number },
+): Promise<Map<string, number[]>> {
+  const raw = await segmentation({
+    event: opts.event,
+    metric: "totals",
+    start: window.start,
+    end: window.end,
+    env: opts.env,
+    groupBy: ["State", "Department"],
+  });
+  return aggregateStateDeptWeekly(parseSegmentation(raw).parsed, opts.weeks ?? 12);
 }
