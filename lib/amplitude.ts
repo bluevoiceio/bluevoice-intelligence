@@ -3,10 +3,12 @@ import "server-only";
 import {
   aggregateBreakdown,
   aggregateGeo,
+  aggregateStateDept,
   parseSegmentation,
   sum,
   type GeoAggregate,
   type RawSegmentation,
+  type StateDeptTotal,
 } from "@/lib/amplitude-parse";
 import type {
   BreakdownResponse,
@@ -161,4 +163,20 @@ export async function getTrend(
   const { parsed, xValues } = parseSegmentation(raw);
   const values = parsed[0]?.series ?? [];
   return { labels: xValues, values, total: sum(values) };
+}
+
+/** Per-(state,department) totals for one window — powers the health board. */
+export async function getAgencyTotals(
+  window: { start: string; end: string },
+  opts: { event: string; metric: Metric; env: Environment },
+): Promise<StateDeptTotal[]> {
+  const raw = await segmentation({
+    event: opts.event,
+    metric: opts.metric,
+    start: window.start,
+    end: window.end,
+    env: opts.env,
+    groupBy: ["State", "Department"],
+  });
+  return aggregateStateDept(parseSegmentation(raw).parsed);
 }
