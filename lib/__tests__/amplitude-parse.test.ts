@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateBreakdown,
   aggregateGeo,
+  aggregateStateDept,
   labelToParts,
   parseSegmentation,
   sum,
   type RawSegmentation,
+  type ParsedSeries,
 } from "@/lib/amplitude-parse";
 
 describe("labelToParts", () => {
@@ -106,5 +108,45 @@ describe("sum", () => {
   it("tolerates undefined and non-numerics", () => {
     expect(sum(undefined)).toBe(0);
     expect(sum([1, 2, 3])).toBe(6);
+  });
+});
+
+describe("aggregateStateDept", () => {
+  const rows: ParsedSeries[] = [
+    { parts: ["Massachusetts", "Quincy PD"], total: 335, series: [] },
+    { parts: ["Massachusetts", "Holyoke"], total: 279, series: [] },
+    { parts: ["New Jersey", "Quincy PD"], total: 5, series: [] }, // same dept, other state
+    { parts: ["Quincy PD"], total: 7, series: [] }, // no state part -> (none)
+  ];
+
+  it("keeps both state and department and sums duplicates", () => {
+    const out = aggregateStateDept(rows);
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 335 });
+    expect(out).toContainEqual({ state: "New Jersey", department: "Quincy PD", total: 5 });
+    expect(out).toContainEqual({ state: "(none)", department: "Quincy PD", total: 7 });
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Holyoke", total: 279 });
+  });
+
+  it("sums rows that share the same state and department", () => {
+    const out = aggregateStateDept([
+      { parts: ["Massachusetts", "Quincy PD"], total: 100, series: [] },
+      { parts: ["Massachusetts", "Quincy PD"], total: 50, series: [] },
+    ]);
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
+  });
+
+  // Amplitude actually returns a two-dimension group-by as a single joined
+  // label ("State; Department"), not a [state, department] array — this is the
+  // shape the live endpoint produces, so it must be split correctly.
+  it("splits Amplitude's joined 'State; Department' label", () => {
+    const out = aggregateStateDept([
+      { parts: ["Colorado; Castle Rock PD"], total: 203, series: [] },
+      { parts: ["Nebraska; La Vista City PD"], total: 214, series: [] },
+      { parts: ["Massachusetts; Quincy PD"], total: 100, series: [] },
+      { parts: ["Massachusetts; Quincy PD"], total: 50, series: [] }, // dedup on the split key
+    ]);
+    expect(out).toContainEqual({ state: "Colorado", department: "Castle Rock PD", total: 203 });
+    expect(out).toContainEqual({ state: "Nebraska", department: "La Vista City PD", total: 214 });
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
   });
 });

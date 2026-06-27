@@ -8,6 +8,7 @@ import type {
   GeoResponse,
   TrendResponse,
 } from "@/lib/types";
+import type { HealthResponse } from "@/lib/health";
 
 /** Shared query string for a given filter set. */
 function qs(filters: Filters): string {
@@ -44,6 +45,13 @@ export const useDevice = (state: string | null, f: Filters) =>
   useStateBreakdown("device", state, f);
 export const useRole = (state: string | null, f: Filters) =>
   useStateBreakdown("role", state, f);
+
+export function useHealth() {
+  return useQuery({
+    queryKey: ["health"],
+    queryFn: () => fetchJson<HealthResponse>(`/api/health?hideTest=1`),
+  });
+}
 
 export function useTrend(state: string | null, filters: Filters) {
   const query = qs(filters);

@@ -36,7 +36,7 @@ export const DEFAULT_FILTERS: Omit<Filters, "event"> = {
 };
 
 /** Names matching this pattern are test/demo departments (spec §6). */
-export const TEST_DEPT_RE = /test|e2e|demo|qa-|sandbox|red voice/i;
+export const TEST_DEPT_RE = /test|e2e|demo|qa-|sandbox|red voice|evaluation|interns|inactive/i;
 
 export function isTestDepartment(name: string): boolean {
   return TEST_DEPT_RE.test(name);
@@ -67,6 +67,25 @@ export function rangeToDates(range: TimeRange): { start: string; end: string } {
   const days = RANGE_DAYS[range];
   const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return { start: formatAmplitudeDate(startDate), end: formatAmplitudeDate(now) };
+}
+
+/**
+ * A trailing N-day window in YYYYMMDD, optionally shifted back by `offsetDays`.
+ * trailingWindow(30, 0) = the last 30 days; trailingWindow(30, 30) = the 30
+ * days before that. Used for month-over-month comparison.
+ */
+export function trailingWindow(
+  days: number,
+  offsetDays = 0,
+): { start: string; end: string } {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const endDate = new Date(now - offsetDays * day);
+  const startDate = new Date(now - (offsetDays + days) * day);
+  return {
+    start: formatAmplitudeDate(startDate),
+    end: formatAmplitudeDate(endDate),
+  };
 }
 
 /** Build the query string the client sends to our own /api/* routes. */

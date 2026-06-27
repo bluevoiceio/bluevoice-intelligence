@@ -115,3 +115,38 @@ export function aggregateBreakdown(parsed: ParsedSeries[]): GroupTotal[] {
     .map(([key, total]) => ({ key, total }))
     .sort((a, b) => b.total - a.total);
 }
+
+export interface StateDeptTotal {
+  state: string;
+  department: string;
+  total: number;
+}
+
+/**
+ * Collapse a [State, Department]-grouped response into per-(state,department)
+ * totals, preserving BOTH parts (unlike aggregateBreakdown, which keeps only
+ * the trailing part).
+ *
+ * Amplitude returns a two-dimension group-by as a single joined label, e.g.
+ * "Massachusetts; Quincy PD" — NOT a ["Massachusetts", "Quincy PD"] array. We
+ * split that back apart on the first "; " so parts[0] is the State and the
+ * trailing part is the Department. A single part with no separator has no
+ * State → "(none)".
+ */
+export function aggregateStateDept(parsed: ParsedSeries[]): StateDeptTotal[] {
+  const byKey = new Map<string, StateDeptTotal>();
+  for (const row of parsed) {
+    let parts = row.parts.map((p) => p.trim());
+    if (parts.length === 1 && parts[0].includes("; ")) {
+      const i = parts[0].indexOf("; ");
+      parts = [parts[0].slice(0, i).trim(), parts[0].slice(i + 2).trim()];
+    }
+    const department = trailingPart(parts) || NONE;
+    const state = parts.length >= 2 ? parts[0] || NONE : NONE;
+    const key = `${state}|${department}`;
+    const cur = byKey.get(key);
+    if (cur) cur.total += row.total;
+    else byKey.set(key, { state, department, total: row.total });
+  }
+  return [...byKey.values()];
+}
