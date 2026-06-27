@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateBreakdown,
   aggregateGeo,
+  aggregateStateDept,
   labelToParts,
   parseSegmentation,
   sum,
   type RawSegmentation,
+  type ParsedSeries,
 } from "@/lib/amplitude-parse";
 
 describe("labelToParts", () => {
@@ -106,5 +108,22 @@ describe("sum", () => {
   it("tolerates undefined and non-numerics", () => {
     expect(sum(undefined)).toBe(0);
     expect(sum([1, 2, 3])).toBe(6);
+  });
+});
+
+describe("aggregateStateDept", () => {
+  const rows: ParsedSeries[] = [
+    { parts: ["Massachusetts", "Quincy PD"], total: 335, series: [] },
+    { parts: ["Massachusetts", "Holyoke"], total: 279, series: [] },
+    { parts: ["New Jersey", "Quincy PD"], total: 5, series: [] }, // same dept, other state
+    { parts: ["Quincy PD"], total: 7, series: [] }, // no state part -> (none)
+  ];
+
+  it("keeps both state and department and sums duplicates", () => {
+    const out = aggregateStateDept(rows);
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 335 });
+    expect(out).toContainEqual({ state: "New Jersey", department: "Quincy PD", total: 5 });
+    expect(out).toContainEqual({ state: "(none)", department: "Quincy PD", total: 7 });
+    expect(out).toContainEqual({ state: "Massachusetts", department: "Holyoke", total: 279 });
   });
 });

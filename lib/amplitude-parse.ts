@@ -115,3 +115,29 @@ export function aggregateBreakdown(parsed: ParsedSeries[]): GroupTotal[] {
     .map(([key, total]) => ({ key, total }))
     .sort((a, b) => b.total - a.total);
 }
+
+export interface StateDeptTotal {
+  state: string;
+  department: string;
+  total: number;
+}
+
+/**
+ * Collapse a [State, Department]-grouped response into per-(state,department)
+ * totals, preserving BOTH parts (unlike aggregateBreakdown, which keeps only
+ * the trailing part). parts[0] is the State; the trailing part is the
+ * Department. Series with a single part have no State → "(none)".
+ */
+export function aggregateStateDept(parsed: ParsedSeries[]): StateDeptTotal[] {
+  const byKey = new Map<string, StateDeptTotal>();
+  for (const row of parsed) {
+    const parts = row.parts.map((p) => p.trim());
+    const department = trailingPart(parts) || NONE;
+    const state = parts.length >= 2 ? parts[0] || NONE : NONE;
+    const key = `${state}|${department}`;
+    const cur = byKey.get(key);
+    if (cur) cur.total += row.total;
+    else byKey.set(key, { state, department, total: row.total });
+  }
+  return [...byKey.values()];
+}
