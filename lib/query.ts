@@ -36,7 +36,7 @@ export const DEFAULT_FILTERS: Omit<Filters, "event"> = {
 };
 
 /** Names matching this pattern are test/demo departments (spec §6). */
-export const TEST_DEPT_RE = /test|e2e|demo|qa-|sandbox|red voice/i;
+export const TEST_DEPT_RE = /test|e2e|demo|qa-|sandbox|red voice|evaluation|interns|inactive/i;
 
 export function isTestDepartment(name: string): boolean {
   return TEST_DEPT_RE.test(name);
