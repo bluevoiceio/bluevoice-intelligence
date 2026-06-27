@@ -57,16 +57,48 @@ describe("computeHealth", () => {
     expect(agencies).toHaveLength(0);
   });
 
-  it("folds a department across states to its highest-volume state", () => {
+  it("keeps same-named departments in different states as separate agencies", () => {
     const { agencies } = computeHealth(
-      [sdt("Massachusetts", "Quincy PD", 300), sdt("New Jersey", "Quincy PD", 35)],
-      [sdt("Massachusetts", "Quincy PD", 336)],
+      [sdt("Massachusetts", "Lakewood", 300), sdt("New Jersey", "Lakewood", 35)],
+      [sdt("Massachusetts", "Lakewood", 280)],
       opts,
     );
-    const q = agencies.find((x) => x.department === "Quincy PD")!;
-    expect(q.state).toBe("Massachusetts");
-    expect(q.current).toBe(335);
-    expect(q.prior).toBe(336);
+    const ma = agencies.find((a) => a.state === "Massachusetts" && a.department === "Lakewood")!;
+    const nj = agencies.find((a) => a.state === "New Jersey" && a.department === "Lakewood")!;
+    expect(ma.current).toBe(300);
+    expect(ma.prior).toBe(280);
+    expect(nj.current).toBe(35);
+    expect(nj.prior).toBe(0);
+  });
+
+  it("excludes rows whose state is (none)", () => {
+    const { agencies } = computeHealth(
+      [sdt("(none)", "Mystery PD", 200)],
+      [sdt("(none)", "Mystery PD", 100)],
+      opts,
+    );
+    expect(agencies).toHaveLength(0);
+  });
+
+  it("flags an agency that vanished entirely as a -100% decliner", () => {
+    const { agencies } = computeHealth(
+      [],
+      [sdt("Ohio", "Gone PD", 120)],
+      opts,
+    );
+    const a = agencies.find((x) => x.department === "Gone PD")!;
+    expect(a.status).toBe("decliner");
+    expect(a.current).toBe(0);
+    expect(Math.round(a.deltaPct!)).toBe(-100);
+  });
+
+  it("keeps test departments when hideTest is false", () => {
+    const { agencies } = computeHealth(
+      [sdt("Massachusetts", "TEST E2E Department", 80)],
+      [sdt("Massachusetts", "TEST E2E Department", 60)],
+      { ...opts, hideTest: false },
+    );
+    expect(agencies.some((a) => a.department === "TEST E2E Department")).toBe(true);
   });
 
   it("summary ranks decliners by absolute drop and computes state share", () => {

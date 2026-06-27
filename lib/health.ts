@@ -54,21 +54,9 @@ const NONE = "(none)";
 
 interface Acc {
   department: string;
+  state: string;
   current: number;
   prior: number;
-  stateVolume: Map<string, number>;
-}
-
-function dominantState(stateVolume: Map<string, number>): string {
-  let best = NONE;
-  let bestVol = -1;
-  for (const [state, vol] of stateVolume) {
-    if (state !== NONE && vol > bestVol) {
-      best = state;
-      bestVol = vol;
-    }
-  }
-  return best;
 }
 
 function classify(current: number, prior: number, opts: HealthOptions): HealthStatus {
@@ -86,34 +74,36 @@ export function computeHealth(
   prior: StateDeptTotal[],
   opts: HealthOptions,
 ): { agencies: AgencyHealth[]; summary: HealthSummary } {
-  const byDept = new Map<string, Acc>();
+  // Key by (state, department) so same-named departments in different states
+  // are treated as separate agencies — one agency always maps to one state.
+  const byKey = new Map<string, Acc>();
 
   const ingest = (rows: StateDeptTotal[], field: "current" | "prior") => {
     for (const row of rows) {
       const dept = row.department.trim();
+      const state = row.state?.trim() ?? "";
       if (!dept || dept === NONE) continue;
+      if (!state || state === NONE) continue;
       if (opts.hideTest && isTestDepartment(dept)) continue;
-      let acc = byDept.get(dept);
+      const key = `${state}\t${dept}`;
+      let acc = byKey.get(key);
       if (!acc) {
-        acc = { department: dept, current: 0, prior: 0, stateVolume: new Map() };
-        byDept.set(dept, acc);
+        acc = { department: dept, state, current: 0, prior: 0 };
+        byKey.set(key, acc);
       }
       acc[field] += row.total;
-      if (row.state && row.state !== NONE) {
-        acc.stateVolume.set(row.state, (acc.stateVolume.get(row.state) ?? 0) + row.total);
-      }
     }
   };
 
   ingest(current, "current");
   ingest(prior, "prior");
 
-  const agencies: AgencyHealth[] = [...byDept.values()].map((acc) => {
+  const agencies: AgencyHealth[] = [...byKey.values()].map((acc) => {
     const deltaAbs = acc.current - acc.prior;
     const deltaPct = acc.prior >= opts.floor ? (deltaAbs / acc.prior) * 100 : null;
     return {
       department: acc.department,
-      state: dominantState(acc.stateVolume),
+      state: acc.state,
       current: acc.current,
       prior: acc.prior,
       deltaAbs,
@@ -142,9 +132,9 @@ export function computeHealth(
   const totalCurrent = agencies.reduce((sum, a) => sum + a.current, 0);
   const totalPrior = agencies.reduce((sum, a) => sum + a.prior, 0);
 
+  // Each agency has exactly one state (guaranteed by composite keying above).
   const byState = new Map<string, number>();
   for (const a of agencies) {
-    if (a.state === NONE) continue;
     byState.set(a.state, (byState.get(a.state) ?? 0) + a.current);
   }
   const topStateShare = [...byState.entries()]
