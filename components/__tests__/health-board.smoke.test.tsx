@@ -8,20 +8,24 @@ import type { AgencyHealth, HealthResponse } from "@/lib/health";
 const decliner: AgencyHealth = {
   department: "Castle Rock PD",
   state: "Colorado",
+  usps: "CO",
   current: 203,
   prior: 334,
   deltaAbs: -131,
   deltaPct: -39,
   status: "decliner",
+  score: 28,
 };
 const riser: AgencyHealth = {
   department: "Pittsfield",
   state: "Massachusetts",
+  usps: "MA",
   current: 208,
   prior: 79,
   deltaAbs: 129,
   deltaPct: 163,
   status: "riser",
+  score: 84,
 };
 
 const data: HealthResponse = {
