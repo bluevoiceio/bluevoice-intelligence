@@ -9,6 +9,7 @@ import type {
   TrendResponse,
 } from "@/lib/types";
 import type { HealthResponse } from "@/lib/health";
+import type { IntelligenceResponse } from "@/lib/intelligence";
 
 /** Shared query string for a given filter set. */
 function qs(filters: Filters): string {
@@ -50,6 +51,13 @@ export function useHealth() {
   return useQuery({
     queryKey: ["health"],
     queryFn: () => fetchJson<HealthResponse>(`/api/health?hideTest=1`),
+  });
+}
+
+export function useIntelligence() {
+  return useQuery({
+    queryKey: ["intelligence"],
+    queryFn: () => fetchJson<IntelligenceResponse>(`/api/intelligence?hideTest=1`),
   });
 }
 
