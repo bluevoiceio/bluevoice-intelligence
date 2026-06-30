@@ -4,6 +4,7 @@ import {
   aggregateBreakdown,
   aggregateGeo,
   aggregateStateDept,
+  aggregateStateDeptWeekly,
   parseSegmentation,
   sum,
   type GeoAggregate,
@@ -29,6 +30,11 @@ import type {
 
 const BASE_URL = process.env.AMPLITUDE_BASE_URL ?? "https://amplitude.com";
 const UPSTREAM_REVALIDATE = 600; // seconds — second cache layer below the route
+const MAX_ATTEMPTS = 3; // 1 try + 2 retries on 429/5xx
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Exponential-ish backoff with jitter: ~400ms, ~900ms. */
+const backoffMs = (attempt: number) => 400 * (attempt + 1) + Math.floor(Math.random() * 250);
 
 /** Thrown when env credentials are missing; routes map this to a 500 + hint. */
 export class AmplitudeConfigError extends Error {}
@@ -109,29 +115,45 @@ async function segmentation(opts: SegmentationOpts): Promise<RawSegmentation> {
   // config error (500), not a wrapped upstream error (502).
   const auth = authHeader();
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { Authorization: auth },
-      next: { revalidate: UPSTREAM_REVALIDATE },
-    });
-  } catch (err) {
-    throw new AmplitudeUpstreamError(
-      `Could not reach Amplitude: ${(err as Error).message}`,
-    );
-  }
-  if (!res.ok) {
+  // The board fires several segmentation calls at once; Amplitude rate-limits
+  // bursts (429) and occasionally 5xxs. Retry those transiently with backoff so
+  // a throttled secondary call doesn't come back empty and read as "0% adopted".
+  let lastError = "Amplitude request failed";
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { Authorization: auth },
+        next: { revalidate: UPSTREAM_REVALIDATE },
+      });
+    } catch (err) {
+      lastError = `Could not reach Amplitude: ${(err as Error).message}`;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleep(backoffMs(attempt));
+        continue;
+      }
+      throw new AmplitudeUpstreamError(lastError);
+    }
+
+    if (res.ok) {
+      const json = (await res.json()) as RawSegmentation;
+      if (process.env.AMPLITUDE_DEBUG === "1") {
+        // One-time shape inspection — lock the parser to the real response.
+        console.log("[amplitude] raw response:", JSON.stringify(json).slice(0, 4000));
+      }
+      return json;
+    }
+
+    const retriable = res.status === 429 || res.status >= 500;
     const body = await res.text().catch(() => "");
-    throw new AmplitudeUpstreamError(
-      `Amplitude returned ${res.status} ${res.statusText}. ${body.slice(0, 300)}`,
-    );
+    lastError = `Amplitude returned ${res.status} ${res.statusText}. ${body.slice(0, 300)}`;
+    if (!retriable || attempt === MAX_ATTEMPTS - 1) {
+      throw new AmplitudeUpstreamError(lastError);
+    }
+    const retryAfter = Number(res.headers.get("retry-after"));
+    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs(attempt));
   }
-  const json = (await res.json()) as RawSegmentation;
-  if (process.env.AMPLITUDE_DEBUG === "1") {
-    // One-time shape inspection — lock the parser to the real response.
-    console.log("[amplitude] raw response:", JSON.stringify(json).slice(0, 4000));
-  }
-  return json;
+  throw new AmplitudeUpstreamError(lastError);
 }
 
 // --- Public API (used by route handlers) -----------------------------------
@@ -168,7 +190,7 @@ export async function getTrend(
 /** Per-(state,department) totals for one window — powers the health board. */
 export async function getAgencyTotals(
   window: { start: string; end: string },
-  opts: { event: string; metric: Metric; env: Environment },
+  opts: { event: string; metric: Metric; env: Environment; role?: Role },
 ): Promise<StateDeptTotal[]> {
   const raw = await segmentation({
     event: opts.event,
@@ -176,7 +198,27 @@ export async function getAgencyTotals(
     start: window.start,
     end: window.end,
     env: opts.env,
+    role: opts.role,
     groupBy: ["State", "Department"],
   });
   return aggregateStateDept(parseSegmentation(raw).parsed);
+}
+
+/**
+ * Per-(state,department) WEEKLY series over a window — powers the health-board
+ * sparklines/slopegraphs. Daily interval is bucketed into `weeks` trailing weeks.
+ */
+export async function getAgencyWeeklySeries(
+  window: { start: string; end: string },
+  opts: { event: string; env: Environment; weeks?: number },
+): Promise<Map<string, number[]>> {
+  const raw = await segmentation({
+    event: opts.event,
+    metric: "totals",
+    start: window.start,
+    end: window.end,
+    env: opts.env,
+    groupBy: ["State", "Department"],
+  });
+  return aggregateStateDeptWeekly(parseSegmentation(raw).parsed, opts.weeks ?? 12);
 }

@@ -150,3 +150,54 @@ export function aggregateStateDept(parsed: ParsedSeries[]): StateDeptTotal[] {
   }
   return [...byKey.values()];
 }
+
+/** Elementwise sum of two arrays (pads the shorter with zeros). */
+function addInto(target: number[], add: number[]): number[] {
+  const n = Math.max(target.length, add.length);
+  const out = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) out[i] = (target[i] ?? 0) + (add[i] ?? 0);
+  return out;
+}
+
+/**
+ * Bucket a daily series into `weeks` trailing weekly sums (chronological order).
+ * Groups from the END so the most recent week is always whole; left-pads with
+ * zeros when the series is shorter than `weeks`.
+ */
+export function bucketDailyToWeekly(daily: number[], weeks: number): number[] {
+  const buckets: number[] = [];
+  for (let end = daily.length; end > 0; end -= 7) {
+    buckets.push(sum(daily.slice(Math.max(0, end - 7), end)));
+  }
+  buckets.reverse();
+  const tail = buckets.slice(-weeks);
+  while (tail.length < weeks) tail.unshift(0);
+  return tail;
+}
+
+/**
+ * Per-(state,department) weekly series from a daily-interval [State,Department]
+ * response. Mirrors aggregateStateDept's label-splitting but preserves the
+ * series, bucketed into `weeks` trailing weekly sums. Keyed `state|department`.
+ */
+export function aggregateStateDeptWeekly(
+  parsed: ParsedSeries[],
+  weeks = 12,
+): Map<string, number[]> {
+  const byKey = new Map<string, number[]>();
+  for (const row of parsed) {
+    let parts = row.parts.map((p) => p.trim());
+    if (parts.length === 1 && parts[0].includes("; ")) {
+      const i = parts[0].indexOf("; ");
+      parts = [parts[0].slice(0, i).trim(), parts[0].slice(i + 2).trim()];
+    }
+    const department = trailingPart(parts) || NONE;
+    const state = parts.length >= 2 ? parts[0] || NONE : NONE;
+    if (department === NONE || state === NONE) continue;
+    const key = `${state}|${department}`;
+    const weekly = bucketDailyToWeekly(row.series, weeks);
+    const cur = byKey.get(key);
+    byKey.set(key, cur ? addInto(cur, weekly) : weekly);
+  }
+  return byKey;
+}

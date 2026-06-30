@@ -25,6 +25,12 @@ export function ThemeToggle() {
   const current = (theme as (typeof order)[number]) ?? "system";
   const next = order[(order.indexOf(current) + 1) % order.length];
 
+  // Before mount, render exactly what the server emits (theme is unknown there,
+  // so it resolves to "system"). Gating the icon AND the label/title on `mounted`
+  // keeps the first client paint identical to the server — no hydration mismatch.
+  const displayCurrent = mounted ? current : "system";
+  const displayNext = mounted ? next : "light";
+
   const Icon = !mounted
     ? Sun
     : current === "dark"
@@ -37,8 +43,8 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={() => setTheme(next)}
-      aria-label={`Theme: ${current}. Switch to ${next}.`}
-      title={`Theme: ${current}`}
+      aria-label={`Theme: ${displayCurrent}. Switch to ${displayNext}.`}
+      title={`Theme: ${displayCurrent}`}
       className={cn(
         "flex size-9 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
