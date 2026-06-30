@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Radar } from "lucide-react";
 
 import { useIntelligence } from "@/components/hooks";
 import { AccountHoverCard } from "@/components/intelligence/AccountHoverCard";
@@ -19,7 +18,6 @@ import {
   PILLAR_COUNT,
   PILLAR_KEYS,
   PILLAR_LABELS,
-  type LensKey,
 } from "@/components/intelligence/lens";
 import { Kpi } from "@/components/Kpi";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -27,7 +25,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AccountIntelligence } from "@/lib/intelligence";
 import { fmt } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 export function IntelConsole() {
   const { data, isLoading, error } = useIntelligence();
@@ -76,18 +73,7 @@ export function IntelConsole() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[1400px] flex-col gap-8 px-4 py-6 sm:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Radar className="size-5" />
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight tracking-tight">Account Intelligence</h1>
-            <p className="text-xs text-muted-foreground">
-              Four signals — momentum, trust, breadth, activation — fused into one health score for every department.
-            </p>
-          </div>
-        </div>
+      <header className="flex justify-end">
         <ThemeToggle />
       </header>
 
@@ -129,8 +115,8 @@ export function IntelConsole() {
           <div className="grid grid-cols-2 gap-3">
             <Kpi label="At risk" loading={isLoading} value={<Accent color="#e5484d">{story ? story.red : "—"}</Accent>} hint="composite < 40" />
             <Kpi label="Median health" loading={isLoading} value={<Accent color={story ? compositeRamp(story.median) : undefined}>{story ? story.median : "—"}</Accent>} hint="whole book" />
-            <Kpi label="Avg pillars" loading={isLoading} value={story ? story.avgPillars.toFixed(1) : "—"} hint={`of ${PILLAR_COUNT} · adoption depth`} />
-            <Kpi label="Ask-only" loading={isLoading} value={story ? story.expansionReady : "—"} hint="≤1 pillar · whitespace" />
+            <Kpi label="Avg features" loading={isLoading} value={story ? story.avgPillars.toFixed(1) : "—"} hint={`of ${PILLAR_COUNT} · how much they use`} />
+            <Kpi label="Ask-only" loading={isLoading} value={story ? story.expansionReady : "—"} hint="≤1 feature · upsell room" />
           </div>
 
           <GlyphLegend />
@@ -163,8 +149,8 @@ export function IntelConsole() {
         title="The strategic map"
         caption={
           story
-            ? `${story.lowBreadthPct}% of accounts are low-breadth — broadening adoption is the biggest lever. Rescue the bottom-left corner; expand the champions.`
-            : "Breadth versus momentum — where each account sits, and the play."
+            ? `${story.lowBreadthPct}% of accounts use only a feature or two — broadening adoption is the biggest lever. Rescue the bottom-left corner; expand the champions.`
+            : "Feature adoption versus usage trend — where each account sits, and the play."
         }
       >
         {isLoading ? (
@@ -198,7 +184,7 @@ export function IntelConsole() {
         caption={
           story?.lowest
             ? `${story.lowest.label} is live in just ${Math.round(story.lowest.pct * 100)}% of the book — the clearest cross-sell path. Muted cells below are the targets.`
-            : "Pillar adoption across the book — the unused pillars are the opportunity."
+            : "Feature adoption across the book — the unused features are the opportunity."
         }
       >
         {isLoading ? (
@@ -207,10 +193,6 @@ export function IntelConsole() {
           <WhitespaceMatrix accounts={accounts} unavailable={data?.unavailablePillars ?? []} onSelect={select} onHover={onHover} />
         )}
       </Section>
-
-      <footer className="pb-4 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-        Blue Voice · {data ? fmt(data.summary.total) : "—"} departments · momentum · trust · breadth · activation
-      </footer>
 
       {hover ? <AccountHoverCard account={hover.a} x={hover.x} y={hover.y} /> : null}
     </div>
@@ -249,28 +231,17 @@ function Accent({ color, children }: { color?: string; children: React.ReactNode
 }
 
 function GlyphLegend() {
-  const sample = { momentum: 82, trust: 64, breadth: 40, activation: null };
-  const pos: Record<LensKey, string> = {
-    momentum: "left-1/2 -top-1 -translate-x-1/2",
-    trust: "top-1/2 -right-2 -translate-y-1/2",
-    breadth: "left-1/2 -bottom-1 -translate-x-1/2",
-    activation: "top-1/2 -left-2 -translate-y-1/2",
-  };
+  const sample = { activity: 70, momentum: 82, trust: 64, realization: 48, breadth: 40, activation: null };
   return (
     <Card>
       <CardContent className="flex items-center gap-5 p-5">
         <div className="relative shrink-0 text-muted-foreground" style={{ width: 96, height: 96 }}>
           <LensGlyph lenses={sample} band="yellow" size={96} />
-          {LENSES.map((l) => (
-            <span key={l.key} className={cn("absolute font-mono text-[8px]", pos[l.key])} style={{ color: l.accent }}>
-              {l.short}
-            </span>
-          ))}
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold tracking-tight">Reading a signature</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Each account is a four-spoke glyph — longer spoke, stronger lens; color is the composite verdict; a dashed stub means no signal.
+            Each account is a four-spoke glyph — longer spoke, stronger lens; color is the health verdict; a dashed stub means no signal.
           </p>
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
             {LENSES.map((l) => (

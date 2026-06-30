@@ -3,14 +3,16 @@
  * geometry drives the small roster glyphs and the large focus glyph identically.
  *
  * The signature motif is the LENS GLYPH: each account is a four-spoke radial
- * signature — momentum (top), trust (right), breadth (bottom), activation
- * (left) — where spoke length encodes the 0–100 lens score and the whole shape
- * is tinted by the account's composite band. Shape carries the story; color
- * carries the verdict.
+ * signature of the HEALTH signals that actually carry data — usage, trend,
+ * answer quality, feature adoption — where spoke length encodes the 0–100 lens
+ * score and the whole shape is tinted by the account's health band. Shape
+ * carries the story; color carries the verdict. (Value delivered is shown
+ * separately as expansion upside; onboarding is omitted — too sparse at the
+ * department grain to populate.)
  */
 import type { AccountIntelligence, Band, LensScores } from "@/lib/intelligence";
 
-export type LensKey = "momentum" | "trust" | "breadth" | "activation";
+export type LensKey = "activity" | "momentum" | "trust" | "realization" | "breadth" | "activation";
 
 export interface LensDef {
   key: LensKey;
@@ -25,14 +27,15 @@ export interface LensDef {
 }
 
 /**
- * Order is the polygon winding order: top → right → bottom → left. Accents are
- * a restrained, professional categorical set (blue/indigo/violet/teal).
+ * Order is the polygon winding order: momentum at 12 o'clock, then clockwise
+ * around an even pentagon (72° apart). Accents are a restrained, professional
+ * categorical set (blue/indigo/rose/violet/teal).
  */
 export const LENSES: LensDef[] = [
-  { key: "momentum", label: "Momentum", short: "MOM", angle: 0, accent: "#3b82f6", blurb: "Usage trend, month over month" },
-  { key: "trust", label: "Trust", short: "TRU", angle: 90, accent: "#6366f1", blurb: "Answer quality — friction & re-asks" },
-  { key: "breadth", label: "Breadth", short: "BRD", angle: 180, accent: "#a855f7", blurb: "Product-pillar adoption" },
-  { key: "activation", label: "Activation", short: "ACT", angle: 270, accent: "#14b8a6", blurb: "Time-to-value for new officers" },
+  { key: "activity", label: "Usage", short: "Usage", angle: 0, accent: "#3b82f6", blurb: "How much they use it, ranked against the rest of the book" },
+  { key: "momentum", label: "Trend", short: "Trend", angle: 90, accent: "#6366f1", blurb: "Usage direction — growing or shrinking vs last month" },
+  { key: "trust", label: "Answer quality", short: "Quality", angle: 180, accent: "#14b8a6", blurb: "Do officers trust the answers, or re-ask and downvote?" },
+  { key: "breadth", label: "Feature adoption", short: "Tools", angle: 270, accent: "#a855f7", blurb: "How many of the product's tools they actually use" },
 ];
 
 // --- Band / composite color ramp --------------------------------------------
@@ -52,12 +55,18 @@ export function bandColor(band: Band) {
 /** Non-health accent for adoption bars (brand blue). */
 export const SIGNAL = "#3b82f6";
 
-/** Continuous composite ramp for fine gradients (red→amber→green). */
+/**
+ * Composite color ramp — BAND-ALIGNED so a tile's hue always matches its score
+ * and band badge. Each band keeps its own colour family across its score range
+ * (red <40, amber 40–69, green ≥70), with a light→dark gradient *within* the
+ * band for nuance. The hue flips exactly at the 40/70 band boundaries, the same
+ * thresholds `bandFor`/`bandColor` use — so 62 reads amber (Watch), not green.
+ */
 export function compositeRamp(score: number): string {
   const s = clamp(score, 0, 100);
-  if (s <= 40) return lerpHex("#e5484d", "#d9930a", s / 40);
-  if (s <= 75) return lerpHex("#d9930a", "#2bb673", (s - 40) / 35);
-  return lerpHex("#2bb673", "#1f9e63", (s - 75) / 25);
+  if (s < 40) return lerpHex("#c0383c", "#e5484d", s / 40); // red band
+  if (s < 66) return lerpHex("#c9870a", "#e8b13a", (s - 40) / 26); // amber band
+  return lerpHex("#2bb673", "#1f9e63", (s - 66) / 34); // green band
 }
 
 // --- Glyph geometry ----------------------------------------------------------
@@ -112,6 +121,20 @@ export function glyphGeometry(lenses: LensScores, size: number): GlyphGeometry {
   const path =
     spokes.map((s, i) => `${i === 0 ? "M" : "L"}${s.tip.x.toFixed(2)},${s.tip.y.toFixed(2)}`).join(" ") + " Z";
   return { spokes, path, center: c, r };
+}
+
+/**
+ * Where a lens's value label sits around the glyph, as box-fraction CSS
+ * left/top to pair with `translate(-50%, -50%)`. Angle-driven so it lands
+ * correctly for any spoke at any count (pentagon today, not the old four
+ * cardinal directions). `radiusFrac` 0.58 sits just outside the spoke tips.
+ */
+export function lensLabelAnchor(angle: number, radiusFrac = 0.58): { left: string; top: string } {
+  const rad = ((angle - 90) * Math.PI) / 180; // 0° = up
+  return {
+    left: `${(50 + radiusFrac * 100 * Math.cos(rad)).toFixed(1)}%`,
+    top: `${(50 + radiusFrac * 100 * Math.sin(rad)).toFixed(1)}%`,
+  };
 }
 
 // --- Formatting helpers ------------------------------------------------------

@@ -1,13 +1,12 @@
 "use client";
 
-import type { AccountIntelligence } from "@/lib/intelligence";
+import { recommend, type AccountIntelligence } from "@/lib/intelligence";
 import { LensGlyph } from "@/components/intelligence/LensGlyph";
 import {
   bandColor,
   deltaPctLabel,
   LENSES,
-  type LensKey,
-  PILLAR_COUNT,
+  lensLabelAnchor,
   PILLAR_KEYS,
   PILLAR_LABELS,
 } from "@/components/intelligence/lens";
@@ -17,35 +16,6 @@ import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const BAND_BADGE = { red: "warning", yellow: "warning", green: "success" } as const;
-
-// Where each lens value label sits around the glyph (spoke directions).
-const LABEL_POS: Record<LensKey, string> = {
-  momentum: "left-1/2 -top-2 -translate-x-1/2",
-  trust: "top-1/2 -right-3 -translate-y-1/2",
-  breadth: "left-1/2 -bottom-2 -translate-x-1/2",
-  activation: "top-1/2 -left-3 -translate-y-1/2",
-};
-
-function readFor(a: AccountIntelligence): string {
-  const present = LENSES.map((l) => ({ l, v: a.lenses[l.key] })).filter(
-    (x): x is { l: (typeof LENSES)[number]; v: number } => x.v != null,
-  );
-  if (a.status === "new") return "Newly activated — nurture to first value.";
-  const weakest = present.sort((x, y) => x.v - y.v)[0];
-  if (!weakest || weakest.v >= 70) {
-    return a.pillarsUsed >= 4 ? "Healthy across the board — an expansion proof point." : "Healthy, but whitespace remains in unused pillars.";
-  }
-  switch (weakest.l.key) {
-    case "momentum":
-      return "Usage is sliding month-over-month — the at-risk signal.";
-    case "trust":
-      return "Answer quality is slipping — friction and re-asks rising.";
-    case "breadth":
-      return `Only ${a.pillarsUsed} of ${PILLAR_COUNT} pillars in use — clear expansion whitespace.`;
-    default:
-      return "Slow time-to-value for newly onboarded officers.";
-  }
-}
 
 export function AccountFocus({ account }: { account: AccountIntelligence | null }) {
   if (!account) {
@@ -68,7 +38,8 @@ export function AccountFocus({ account }: { account: AccountIntelligence | null 
             return (
               <span
                 key={l.key}
-                className={cn("absolute flex flex-col items-center font-mono text-[10px] leading-tight", LABEL_POS[l.key])}
+                className="absolute flex flex-col items-center font-mono text-[10px] leading-tight -translate-x-1/2 -translate-y-1/2"
+                style={lensLabelAnchor(l.angle, 0.5)}
               >
                 <span className="text-muted-foreground">{l.short}</span>
                 <span className="text-xs font-semibold tabular-nums" style={{ color: v == null ? undefined : l.accent }}>
@@ -91,7 +62,7 @@ export function AccountFocus({ account }: { account: AccountIntelligence | null 
             <span className="text-5xl font-semibold leading-none tabular-nums" style={{ color: c.solid }}>
               {account.composite}
             </span>
-            <span className="pb-1 text-xs text-muted-foreground">/100 composite</span>
+            <span className="pb-1 text-xs text-muted-foreground">/100 health</span>
             <span
               className="ml-auto pb-1 font-mono text-xs"
               style={{ color: account.status === "decliner" ? c.solid : undefined }}
@@ -99,10 +70,58 @@ export function AccountFocus({ account }: { account: AccountIntelligence | null 
               {deltaPctLabel(account)} MoM
             </span>
           </div>
-          <p className="mt-2 text-sm leading-snug text-muted-foreground">{readFor(account)}</p>
+          {(() => {
+            // Why the score is what it is: the weakest present lens drags it
+            // down, the strongest holds it up — named in plain English.
+            const present = LENSES.map((l) => ({ l, v: account.lenses[l.key] })).filter(
+              (x): x is { l: (typeof LENSES)[number]; v: number } => x.v != null,
+            );
+            if (present.length < 2) return null;
+            const sorted = [...present].sort((a, b) => a.v - b.v);
+            const drag = sorted[0];
+            const lift = sorted[sorted.length - 1];
+            return (
+              <p className="mt-2 text-xs leading-snug text-muted-foreground">
+                Held back by <span style={{ color: drag.l.accent }}>{drag.l.label}</span> ({drag.v}); strongest on{" "}
+                <span style={{ color: lift.l.accent }}>{lift.l.label}</span> ({lift.v}).
+              </p>
+            );
+          })()}
+          {(() => {
+            const rec = recommend(account);
+            return (
+              <div className="mt-3 rounded-lg border border-border/70 bg-muted/30 p-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Next play</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+                <p className="mt-1 text-sm font-semibold tracking-tight" style={{ color: c.solid }}>
+                  {rec.play}
+                </p>
+                <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{rec.detail}</p>
+              </div>
+            );
+          })()}
+
+          {account.lenses.realization != null ? (
+            <div className="mt-3">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Upside</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="text-sm font-medium text-foreground">Value delivered</span>
+                <span className="text-sm font-semibold tabular-nums" style={{ color: "#ec4899" }}>{account.lenses.realization}</span>
+                <span className="text-xs text-muted-foreground">/ 100</span>
+              </div>
+              <p className="mt-0.5 text-xs leading-snug text-muted-foreground/80">
+                Outcomes shipped vs peers — expansion potential, not part of the health score.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-            <span className="mr-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">pillars</span>
+            <span className="mr-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">features</span>
             {PILLAR_KEYS.map((k, i) => {
               const used = (account.pillars?.[k] ?? 0) > 0;
               return (

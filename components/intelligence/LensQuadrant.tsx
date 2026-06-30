@@ -83,10 +83,10 @@ export function LensQuadrant({
 
       {/* axis labels */}
       <text x={PAD.l + innerW / 2} y={H - 14} textAnchor="middle" className="fill-muted-foreground" fontSize={12}>
-        Breadth — pillar adoption →
+        Feature adoption →
       </text>
       <text transform={`translate(16 ${PAD.t + innerH / 2}) rotate(-90)`} textAnchor="middle" className="fill-muted-foreground" fontSize={12}>
-        Momentum — usage trend →
+        Usage trend →
       </text>
 
       {/* bubbles */}

@@ -4,7 +4,9 @@ import type { AccountIntelligence } from "@/lib/intelligence";
 import { AccountFocus } from "@/components/intelligence/AccountFocus";
 
 const W = 480;
-const ESTIMATED_H = 300;
+// Tall enough to cover the focus card (glyph + Next-play + Upside + features)
+// so the bottom clamp keeps the whole card on-screen and sits it a touch higher.
+const ESTIMATED_H = 560;
 
 /**
  * The shared account signature, summoned on hover from any visualization. A

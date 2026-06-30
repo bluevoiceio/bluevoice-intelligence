@@ -7,10 +7,10 @@ import { bandColor, glyphGeometry } from "@/components/intelligence/lens";
 import { cn } from "@/lib/utils";
 
 /**
- * The signature account glyph: a four-spoke radial signature (momentum top,
- * trust right, breadth bottom, activation left) whose shape encodes the lens
- * scores and whose color encodes the composite band. Renders crisp from 28px
- * roster size to 220px focus size.
+ * The signature account glyph: a four-spoke radial signature (usage, trend,
+ * answer quality, feature adoption) whose shape encodes the health-lens scores
+ * and whose color encodes the health band. Renders crisp from 28px roster size
+ * to 220px focus size.
  */
 export function LensGlyph({
   lenses,

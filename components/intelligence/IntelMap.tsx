@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import type { AccountIntelligence, Band } from "@/lib/intelligence";
+import { bandFor, type AccountIntelligence } from "@/lib/intelligence";
 import { LensGlyph } from "@/components/intelligence/LensGlyph";
 import { bandColor, compositeRamp } from "@/components/intelligence/lens";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fmtCompact } from "@/lib/format";
 import { GRID_COLS, STATE_GRID, USPS_TO_STATE_NAME } from "@/lib/states";
 import { cn } from "@/lib/utils";
-
-function bandOfScore(score: number): Band {
-  if (score >= 75) return "green";
-  if (score >= 40) return "yellow";
-  return "red";
-}
 
 function luminance(hex: string): number {
   const h = hex.replace("#", "");
@@ -137,7 +131,7 @@ export function IntelMap({
                 );
               }
               const fill = compositeRamp(agg.score);
-              const glow = bandColor(bandOfScore(agg.score)).glow;
+              const glow = bandColor(bandFor(agg.score)).glow;
               const atRisk = agg.atRisk > 0;
               const isSelected = selected === name;
               const style: CSSVars = {
@@ -262,7 +256,7 @@ export function IntelMap({
                       {s.atRisk} at risk
                     </Badge>
                   ) : (
-                    <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: bandColor(bandOfScore(s.score)).solid }}>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: bandColor(bandFor(s.score)).solid }}>
                       {s.score}
                     </span>
                   )}
