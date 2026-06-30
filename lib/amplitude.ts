@@ -1,24 +1,12 @@
 import "server-only";
 
 import {
-  aggregateBreakdown,
-  aggregateGeo,
   aggregateStateDept,
-  aggregateStateDeptWeekly,
   parseSegmentation,
-  sum,
-  type GeoAggregate,
   type RawSegmentation,
   type StateDeptTotal,
 } from "@/lib/amplitude-parse";
-import type {
-  BreakdownResponse,
-  Device,
-  Environment,
-  Metric,
-  Role,
-  TrendResponse,
-} from "@/lib/types";
+import type { Device, Environment, Metric, Role } from "@/lib/types";
 
 /**
  * Server-only Amplitude Dashboard REST client (Event Segmentation).
@@ -158,36 +146,7 @@ async function segmentation(opts: SegmentationOpts): Promise<RawSegmentation> {
 
 // --- Public API (used by route handlers) -----------------------------------
 
-export type GeoResult = GeoAggregate;
-
-/** State totals for the choropleth (group_by State). */
-export async function getGeo(
-  opts: Omit<SegmentationOpts, "groupBy" | "state">,
-): Promise<GeoResult> {
-  const raw = await segmentation({ ...opts, groupBy: ["State"] });
-  return aggregateGeo(parseSegmentation(raw).parsed);
-}
-
-/** A sub-dimension breakdown within one state (group_by State + dimension). */
-export async function getBreakdown(
-  opts: Omit<SegmentationOpts, "groupBy"> & { dimension: GroupBy },
-): Promise<BreakdownResponse> {
-  const raw = await segmentation({ ...opts, groupBy: ["State", opts.dimension] });
-  const groups = aggregateBreakdown(parseSegmentation(raw).parsed);
-  return { groups, total: groups.reduce((a, g) => a + g.total, 0) };
-}
-
-/** Daily trend within one state (no group_by). */
-export async function getTrend(
-  opts: Omit<SegmentationOpts, "groupBy">,
-): Promise<TrendResponse> {
-  const raw = await segmentation({ ...opts, groupBy: [] });
-  const { parsed, xValues } = parseSegmentation(raw);
-  const values = parsed[0]?.series ?? [];
-  return { labels: xValues, values, total: sum(values) };
-}
-
-/** Per-(state,department) totals for one window — powers the health board. */
+/** Per-(state,department) totals for one window — powers the intelligence board. */
 export async function getAgencyTotals(
   window: { start: string; end: string },
   opts: { event: string; metric: Metric; env: Environment; role?: Role },
@@ -202,23 +161,4 @@ export async function getAgencyTotals(
     groupBy: ["State", "Department"],
   });
   return aggregateStateDept(parseSegmentation(raw).parsed);
-}
-
-/**
- * Per-(state,department) WEEKLY series over a window — powers the health-board
- * sparklines/slopegraphs. Daily interval is bucketed into `weeks` trailing weeks.
- */
-export async function getAgencyWeeklySeries(
-  window: { start: string; end: string },
-  opts: { event: string; env: Environment; weeks?: number },
-): Promise<Map<string, number[]>> {
-  const raw = await segmentation({
-    event: opts.event,
-    metric: "totals",
-    start: window.start,
-    end: window.end,
-    env: opts.env,
-    groupBy: ["State", "Department"],
-  });
-  return aggregateStateDeptWeekly(parseSegmentation(raw).parsed, opts.weeks ?? 12);
 }
