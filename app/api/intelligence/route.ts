@@ -30,6 +30,12 @@ const NOTIFICATION_EVENT = "Notification Opened";
 /** Implicit answer-quality / friction signals. */
 const BETTER_ANSWER_EVENT = "Better Answer Clicked";
 const DOWNVOTE_EVENT = "Card Downvoted";
+/** Realization — outcomes shipped (delivered work products, the ROI story).
+ *  These are the differentiated, high-value steps that live data shows are
+ *  under-realized relative to raw Q&A volume. None carry `Environment`. */
+const AI_FORM_FILLED_EVENT = "AI Forms Filled Successfully";
+const FORM_EMAILED_EVENT = "Form Emailed Successfully";
+const ARTIFACT_EXPORTED_EVENT = "Artifact Exported";
 
 /**
  * Pillar / Forms events do NOT carry the `Environment` property, so an
@@ -121,6 +127,9 @@ export async function GET(req: NextRequest) {
         () => getAgencyTotals(cur, { event: NOTIFICATION_EVENT, metric: "totals", env: ENVLESS }),
         () => getAgencyTotals(cur, { event: BETTER_ANSWER_EVENT, metric: "totals", env }),
         () => getAgencyTotals(cur, { event: DOWNVOTE_EVENT, metric: "totals", env }),
+        () => getAgencyTotals(cur, { event: AI_FORM_FILLED_EVENT, metric: "totals", env: ENVLESS }),
+        () => getAgencyTotals(cur, { event: FORM_EMAILED_EVENT, metric: "totals", env: ENVLESS }),
+        () => getAgencyTotals(cur, { event: ARTIFACT_EXPORTED_EVENT, metric: "totals", env: ENVLESS }),
       ],
       3,
     );
@@ -134,6 +143,10 @@ export async function GET(req: NextRequest) {
       compliance: mergeTotals(settledValue(settled[3]), settledValue(settled[4])),
       betterAnswers: settledValue(settled[5]),
       downvotes: settledValue(settled[6]),
+      formsAiFilled: settledValue(settled[7]),
+      formsEmailed: settledValue(settled[8]),
+      artifactsExported: settledValue(settled[9]),
+      signoffs: settledValue(settled[3]), // sign-offs also feed value-delivered
     };
 
     const { accounts, summary } = computeIntelligence(buildAccountInputs(signals), {
