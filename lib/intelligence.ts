@@ -107,6 +107,19 @@ export interface IntelligenceSummary {
   bands: Record<Band, number>;
 }
 
+/** Book-wide feature usage totals for the current window — powers the Act 3
+ *  realization-gap funnel. Summed over the kept (filtered) accounts only. */
+export interface FeatureTotals {
+  questions: number;
+  documents: number;
+  signoffs: number;
+  workspace: number;
+  formsEmailed: number;
+  aiFormsFilled: number;
+  artifactsExported: number;
+  redaction: number;
+}
+
 /** Shape returned by GET /api/intelligence. */
 export interface IntelligenceResponse {
   accounts: AccountIntelligence[];
@@ -115,6 +128,7 @@ export interface IntelligenceResponse {
   unavailablePillars?: string[];
   /** Trailing comparison window in days (30 = MoM, 90 = QoQ). */
   window?: number;
+  featureTotals?: FeatureTotals;
 }
 
 export interface IntelligenceOptions {
@@ -500,7 +514,7 @@ export function recommend(a: AccountIntelligence): Recommendation {
 export function computeIntelligence(
   inputs: AccountInput[],
   opts: IntelligenceOptions,
-): { accounts: AccountIntelligence[]; summary: IntelligenceSummary } {
+): { accounts: AccountIntelligence[]; summary: IntelligenceSummary; featureTotals: FeatureTotals } {
   // Filter to real, displayable accounts first so the peer reference below is
   // computed over exactly the book we score (not test/demo or (none) rows).
   const kept = inputs.filter((a) => {
@@ -577,11 +591,26 @@ export function computeIntelligence(
     });
   }
 
+  const featureTotals: FeatureTotals = kept.reduce(
+    (t, a) => {
+      t.questions += a.current;
+      t.documents += a.pillars?.documents ?? 0;
+      t.workspace += a.pillars?.workspace ?? 0;
+      t.redaction += a.pillars?.redaction ?? 0;
+      t.signoffs += a.signoffs ?? 0;
+      t.formsEmailed += a.formsEmailed ?? 0;
+      t.aiFormsFilled += a.formsAiFilled ?? 0;
+      t.artifactsExported += a.artifactsExported ?? 0;
+      return t;
+    },
+    { questions: 0, documents: 0, signoffs: 0, workspace: 0, formsEmailed: 0, aiFormsFilled: 0, artifactsExported: 0, redaction: 0 },
+  );
+
   // Most at-risk first — leadership and CS read the top of the list.
   accounts.sort((x, y) => x.composite - y.composite);
 
   const bands: Record<Band, number> = { green: 0, yellow: 0, red: 0 };
   for (const a of accounts) bands[a.band] += 1;
 
-  return { accounts, summary: { total: accounts.length, bands } };
+  return { accounts, summary: { total: accounts.length, bands }, featureTotals };
 }

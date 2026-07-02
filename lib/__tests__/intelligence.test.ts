@@ -515,3 +515,29 @@ describe("computeIntelligence — account hygiene (mirrors health board)", () =>
     expect(accounts).toHaveLength(2);
   });
 });
+
+describe("featureTotals", () => {
+  const opts = { ...INTELLIGENCE_DEFAULTS, hideTest: true };
+
+  it("sums each feature across kept accounts and excludes test departments", () => {
+    const inputs = buildAccountInputs({
+      current: [
+        { state: "Massachusetts", department: "Quincy PD", total: 100 },
+        { state: "Massachusetts", department: "TEST Dept", total: 999 },
+      ],
+      prior: [{ state: "Massachusetts", department: "Quincy PD", total: 80 }],
+      documents: [{ state: "Massachusetts", department: "Quincy PD", total: 40 }],
+      workspace: [{ state: "Massachusetts", department: "Quincy PD", total: 7 }],
+      redaction: [{ state: "Massachusetts", department: "Quincy PD", total: 3 }],
+      signoffs: [{ state: "Massachusetts", department: "Quincy PD", total: 12 }],
+      formsEmailed: [{ state: "Massachusetts", department: "Quincy PD", total: 5 }],
+      formsAiFilled: [{ state: "Massachusetts", department: "Quincy PD", total: 2 }],
+      artifactsExported: [{ state: "Massachusetts", department: "Quincy PD", total: 1 }],
+    });
+    const { featureTotals } = computeIntelligence(inputs, opts);
+    expect(featureTotals).toEqual({
+      questions: 100, documents: 40, signoffs: 12, workspace: 7,
+      formsEmailed: 5, aiFormsFilled: 2, artifactsExported: 1, redaction: 3,
+    });
+  });
+});
