@@ -5,40 +5,37 @@ import { useMemo, useState } from "react";
 import { useIntelligence } from "@/components/hooks";
 import { AccountHoverCard } from "@/components/intelligence/AccountHoverCard";
 import { BandArc } from "@/components/intelligence/BandArc";
-import { Constellation } from "@/components/intelligence/Constellation";
 import { IntelMap } from "@/components/intelligence/IntelMap";
 import { IntelTreemap } from "@/components/intelligence/IntelTreemap";
-import { LensGlyph } from "@/components/intelligence/LensGlyph";
-import { LensQuadrant } from "@/components/intelligence/LensQuadrant";
 import { WhitespaceMatrix } from "@/components/intelligence/WhitespaceMatrix";
 import {
-  bandColor,
-  compositeRamp,
-  LENSES,
-  PILLAR_COUNT,
-  PILLAR_KEYS,
-  PILLAR_LABELS,
+    bandColor,
+    compositeRamp,
+    PILLAR_COUNT,
+    PILLAR_KEYS,
+    PILLAR_LABELS,
 } from "@/components/intelligence/lens";
 import { Kpi } from "@/components/Kpi";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AccountIntelligence } from "@/lib/intelligence";
-import { fmt } from "@/lib/format";
+import { fmt, fmtCompact } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+/** Preset comparison windows (days) — kept in sync with the route's WINDOW_DAYS. */
+const WINDOW_OPTIONS = [30, 90] as const;
+type WindowDays = (typeof WINDOW_OPTIONS)[number];
 
 export function IntelConsole() {
-  const { data, isLoading, error } = useIntelligence();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [windowDays, setWindowDays] = useState<WindowDays>(30);
+  const { data, isLoading, error } = useIntelligence(windowDays);
 
   const [hover, setHover] = useState<{ a: AccountIntelligence; x: number; y: number } | null>(null);
 
   const accounts = useMemo(() => data?.accounts ?? [], [data]);
-  const keyOf = (a: AccountIntelligence) => `${a.usps}|${a.department}`;
-  const selected = accounts.find((a) => keyOf(a) === selectedKey) ?? null;
-  const select = (a: AccountIntelligence) => setSelectedKey(keyOf(a));
   const onHover = (a: AccountIntelligence | null, e?: { clientX: number; clientY: number }) =>
     setHover(a && e ? { a, x: e.clientX, y: e.clientY } : null);
-  const activeKey = hover ? keyOf(hover.a) : selected ? keyOf(selected) : null;
 
   const story = useMemo(() => {
     if (!data) return null;
@@ -64,16 +61,28 @@ export function IntelConsole() {
     })).filter((p) => !unavail.has(p.key));
     const lowest = [...adoption].sort((x, y) => x.pct - y.pct)[0];
 
-    const lowBreadthPct = withPillars.length
-      ? Math.round((withPillars.filter((a) => a.pillarsUsed <= 1).length / withPillars.length) * 100)
-      : 0;
+    // book-wide momentum & volume — deltaPct is null for sub-floor accounts, so
+    // they count as neither gaining nor declining.
+    const trendingUp = accounts.filter((a) => a.deltaPct != null && a.deltaPct > 0).length;
+    const trendingDown = accounts.filter((a) => a.deltaPct != null && a.deltaPct < 0).length;
+    const totalQuestions = accounts.reduce((s, a) => s + a.current, 0);
+    // book-wide volume change vs the prior (equal-length) window.
+    const totalPrior = accounts.reduce((s, a) => s + a.prior, 0);
+    const volumeDeltaPct = totalPrior ? (totalQuestions - totalPrior) / totalPrior : null;
 
-    return { total, red, avgPillars, expansionReady, median, topRisk, lowest, lowBreadthPct };
+    return {
+      total, red, avgPillars, expansionReady, median, topRisk, lowest,
+      trendingUp, trendingDown, totalQuestions, volumeDeltaPct,
+    };
   }, [data, accounts]);
+
+  // Window-aware copy so "Trend" / "vs prior" always name the actual period.
+  const periodLabel = windowDays === 30 ? "month-over-month" : "quarter-over-quarter";
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[1400px] flex-col gap-8 px-4 py-6 sm:px-6">
-      <header className="flex justify-end">
+      <header className="flex items-center justify-between gap-3">
+        <WindowToggle value={windowDays} onChange={setWindowDays} />
         <ThemeToggle />
       </header>
 
@@ -89,7 +98,7 @@ export function IntelConsole() {
         title="The state of the book"
         caption={
           story
-            ? `${fmt(story.red)} of ${fmt(story.total)} departments are at risk and the median scores ${story.median}/100 — a book that mostly sits on watch.`
+            ? `${fmt(story.red)} of ${fmt(story.total)} departments are at risk and the median scores ${story.median}/100`
             : "Loading the book…"
         }
       >
@@ -119,7 +128,40 @@ export function IntelConsole() {
             <Kpi label="Ask-only" loading={isLoading} value={story ? story.expansionReady : "—"} hint="≤1 feature · upsell room" />
           </div>
 
-          <GlyphLegend />
+          <div className="grid grid-cols-2 gap-3">
+            <Kpi
+              label="Trending up"
+              loading={isLoading}
+              value={<Accent color={bandColor("green").solid}>{story ? fmt(story.trendingUp) : "—"}</Accent>}
+              hint={`gaining ${periodLabel}`}
+            />
+            <Kpi
+              label="Trending down"
+              loading={isLoading}
+              value={<Accent color={bandColor("red").solid}>{story ? fmt(story.trendingDown) : "—"}</Accent>}
+              hint={`declining ${periodLabel}`}
+            />
+            <Kpi
+              label="Total questions"
+              loading={isLoading}
+              value={story ? fmtCompact(story.totalQuestions) : "—"}
+              hint={`last ${windowDays} days`}
+            />
+            <Kpi
+              label="Volume vs prior"
+              loading={isLoading}
+              value={
+                story && story.volumeDeltaPct != null ? (
+                  <Accent color={story.volumeDeltaPct >= 0 ? bandColor("green").solid : bandColor("red").solid}>
+                    {`${story.volumeDeltaPct >= 0 ? "+" : ""}${Math.round(story.volumeDeltaPct * 100)}%`}
+                  </Accent>
+                ) : (
+                  "—"
+                )
+              }
+              hint={`vs prior ${windowDays} days`}
+            />
+          </div>
         </div>
       </Section>
 
@@ -137,49 +179,15 @@ export function IntelConsole() {
           <Skeleton className="h-[460px] w-full rounded-xl" />
         ) : (
           <div className="flex flex-col gap-4">
-            <IntelMap accounts={accounts} onSelectAccount={select} onHover={onHover} />
-            <IntelTreemap accounts={accounts} onSelect={select} onHover={onHover} />
+            <IntelMap accounts={accounts} onHover={onHover} />
+            <IntelTreemap accounts={accounts} onHover={onHover} />
           </div>
         )}
       </Section>
 
-      {/* 03 — THE STRATEGIC MAP */}
+      {/* 03 — THE EXPANSION WHITESPACE */}
       <Section
         n="03"
-        title="The strategic map"
-        caption={
-          story
-            ? `${story.lowBreadthPct}% of accounts use only a feature or two — broadening adoption is the biggest lever. Rescue the bottom-left corner; expand the champions.`
-            : "Feature adoption versus usage trend — where each account sits, and the play."
-        }
-      >
-        {isLoading ? (
-          <Skeleton className="h-[480px] w-full rounded-xl" />
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <LensQuadrant accounts={accounts} activeKey={activeKey} onSelect={select} onHover={onHover} />
-            </CardContent>
-          </Card>
-        )}
-      </Section>
-
-      {/* 04 — THE SPREAD */}
-      <Section
-        n="04"
-        title="The spread"
-        caption="Every account on the composite axis, sized by question volume — a red tail to call, a thin green head to learn from."
-      >
-        {isLoading ? (
-          <Skeleton className="h-[360px] w-full rounded-xl" />
-        ) : (
-          <Constellation accounts={accounts} activeKey={activeKey} onSelect={select} onHover={onHover} />
-        )}
-      </Section>
-
-      {/* 05 — THE EXPANSION WHITESPACE */}
-      <Section
-        n="05"
         title="The expansion whitespace"
         caption={
           story?.lowest
@@ -190,7 +198,7 @@ export function IntelConsole() {
         {isLoading ? (
           <Skeleton className="h-[360px] w-full rounded-xl" />
         ) : (
-          <WhitespaceMatrix accounts={accounts} unavailable={data?.unavailablePillars ?? []} onSelect={select} onHover={onHover} />
+          <WhitespaceMatrix accounts={accounts} unavailable={data?.unavailablePillars ?? []} onHover={onHover} />
         )}
       </Section>
 
@@ -230,29 +238,36 @@ function Accent({ color, children }: { color?: string; children: React.ReactNode
   return <span style={{ color }}>{children}</span>;
 }
 
-function GlyphLegend() {
-  const sample = { activity: 70, momentum: 82, trust: 64, realization: 48, breadth: 40, activation: null };
+/** Segmented control selecting the trailing comparison window the whole board
+ *  runs on. Doubles as the board's window label. */
+function WindowToggle({
+  value,
+  onChange,
+}: {
+  value: WindowDays;
+  onChange: (w: WindowDays) => void;
+}) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-5 p-5">
-        <div className="relative shrink-0 text-muted-foreground" style={{ width: 96, height: 96 }}>
-          <LensGlyph lenses={sample} band="yellow" size={96} />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold tracking-tight">Reading a signature</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Each account is a four-spoke glyph — longer spoke, stronger lens; color is the health verdict; a dashed stub means no signal.
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-            {LENSES.map((l) => (
-              <div key={l.key} className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full" style={{ background: l.accent }} />
-                <span className="text-[11px] text-muted-foreground">{l.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2">
+      <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5">
+        {WINDOW_OPTIONS.map((w) => (
+          <button
+            key={w}
+            type="button"
+            onClick={() => onChange(w)}
+            aria-pressed={value === w}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-medium tabular-nums transition-colors",
+              value === w
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {w}d
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
+
