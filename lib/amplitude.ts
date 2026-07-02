@@ -2,9 +2,11 @@ import "server-only";
 
 import {
   aggregateStateDept,
+  bucketDailyToMonthly,
   parseSegmentation,
   type RawSegmentation,
   type StateDeptTotal,
+  type TrendSeries,
 } from "@/lib/amplitude-parse";
 import type { Device, Environment, Metric, Role } from "@/lib/types";
 
@@ -161,4 +163,26 @@ export async function getAgencyTotals(
     groupBy: ["State", "Department"],
   });
   return aggregateStateDept(parseSegmentation(raw).parsed);
+}
+
+/**
+ * Book-wide monthly trend for a single event (no group-by), for the adoption
+ * sparklines. Fetches a daily series over the window and buckets it to months
+ * — mirrors the daily-fetch-then-bucket pattern of the weekly board series.
+ */
+export async function getEventTrend(
+  window: { start: string; end: string },
+  opts: { event: string; env: Environment },
+): Promise<TrendSeries> {
+  const raw = await segmentation({
+    event: opts.event,
+    metric: "totals",
+    start: window.start,
+    end: window.end,
+    env: opts.env,
+    groupBy: [],
+  });
+  const { parsed, xValues } = parseSegmentation(raw);
+  const daily = parsed[0]?.series ?? [];
+  return { event: opts.event, points: bucketDailyToMonthly(daily, xValues, 6) };
 }

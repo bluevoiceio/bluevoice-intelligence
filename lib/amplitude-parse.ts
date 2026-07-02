@@ -201,3 +201,36 @@ export function aggregateStateDeptWeekly(
   }
   return byKey;
 }
+
+export interface TrendPoint {
+  month: string; // "YYYY-MM"
+  value: number;
+}
+export interface TrendSeries {
+  event: string;
+  points: TrendPoint[];
+}
+export interface TrendsResponse {
+  series: TrendSeries[];
+  window: number; // days covered (~180)
+}
+
+/**
+ * Sum a daily series into trailing calendar-month buckets, keyed "YYYY-MM".
+ * `xValues` are the Amplitude date labels ("YYYY-MM-DD") aligned 1:1 with
+ * `daily`. Returns the last `months` months, chronological. Empty on any
+ * length mismatch (defensive — a malformed response yields no trend, not a
+ * crash or a wrong read).
+ */
+export function bucketDailyToMonthly(daily: number[], xValues: string[], months = 6): TrendPoint[] {
+  if (daily.length === 0 || daily.length !== xValues.length) return [];
+  const byMonth = new Map<string, number>();
+  for (let i = 0; i < daily.length; i++) {
+    const month = xValues[i].slice(0, 7);
+    byMonth.set(month, (byMonth.get(month) ?? 0) + (Number(daily[i]) || 0));
+  }
+  const ordered = [...byMonth.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([month, value]) => ({ month, value }));
+  return ordered.slice(-months);
+}

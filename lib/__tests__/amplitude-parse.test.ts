@@ -4,6 +4,7 @@ import {
   aggregateBreakdown,
   aggregateGeo,
   aggregateStateDept,
+  bucketDailyToMonthly,
   labelToParts,
   parseSegmentation,
   sum,
@@ -148,5 +149,29 @@ describe("aggregateStateDept", () => {
     expect(out).toContainEqual({ state: "Colorado", department: "Castle Rock PD", total: 203 });
     expect(out).toContainEqual({ state: "Nebraska", department: "La Vista City PD", total: 214 });
     expect(out).toContainEqual({ state: "Massachusetts", department: "Quincy PD", total: 150 });
+  });
+});
+
+describe("bucketDailyToMonthly", () => {
+  it("sums daily values into trailing calendar-month buckets", () => {
+    const xValues = ["2026-01-30", "2026-01-31", "2026-02-01", "2026-02-02", "2026-03-01"];
+    const daily = [1, 2, 3, 4, 5];
+    const pts = bucketDailyToMonthly(daily, xValues, 3);
+    expect(pts).toEqual([
+      { month: "2026-01", value: 3 },
+      { month: "2026-02", value: 7 },
+      { month: "2026-03", value: 5 },
+    ]);
+  });
+
+  it("keeps only the last `months` buckets, chronological", () => {
+    const xValues = ["2026-01-15", "2026-02-15", "2026-03-15"];
+    const pts = bucketDailyToMonthly([1, 2, 3], xValues, 2);
+    expect(pts.map((p) => p.month)).toEqual(["2026-02", "2026-03"]);
+  });
+
+  it("returns [] when lengths mismatch or are empty", () => {
+    expect(bucketDailyToMonthly([], [], 6)).toEqual([]);
+    expect(bucketDailyToMonthly([1, 2], ["2026-01-01"], 6)).toEqual([]);
   });
 });
