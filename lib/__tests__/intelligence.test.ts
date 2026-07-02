@@ -6,6 +6,7 @@ import {
   computeIntelligence,
   INTELLIGENCE_DEFAULTS,
   recommend,
+  sumFeatureTotals,
   type AccountInput,
 } from "@/lib/intelligence";
 import type { StateDeptTotal } from "@/lib/amplitude-parse";
@@ -516,28 +517,36 @@ describe("computeIntelligence — account hygiene (mirrors health board)", () =>
   });
 });
 
-describe("featureTotals", () => {
-  const opts = { ...INTELLIGENCE_DEFAULTS, hideTest: true };
-
-  it("sums each feature across kept accounts and excludes test departments", () => {
-    const inputs = buildAccountInputs({
-      current: [
-        { state: "Massachusetts", department: "Quincy PD", total: 100 },
-        { state: "Massachusetts", department: "TEST Dept", total: 999 },
-      ],
+describe("sumFeatureTotals — book-wide totals from RAW batches (not state-joined accounts)", () => {
+  it("counts State-less rows (State = '(none)') that the account join would drop", () => {
+    // Per the project's data-coverage caveat, Form Emailed / AI Forms Filled are
+    // State-less on most rows — they'd fail the state|department join in `kept`
+    // and get zeroed. Summing the raw batch must still count them.
+    const signals = {
+      current: [{ state: "Massachusetts", department: "Quincy PD", total: 100 }],
       prior: [{ state: "Massachusetts", department: "Quincy PD", total: 80 }],
-      documents: [{ state: "Massachusetts", department: "Quincy PD", total: 40 }],
-      workspace: [{ state: "Massachusetts", department: "Quincy PD", total: 7 }],
-      redaction: [{ state: "Massachusetts", department: "Quincy PD", total: 3 }],
-      signoffs: [{ state: "Massachusetts", department: "Quincy PD", total: 12 }],
-      formsEmailed: [{ state: "Massachusetts", department: "Quincy PD", total: 5 }],
-      formsAiFilled: [{ state: "Massachusetts", department: "Quincy PD", total: 2 }],
-      artifactsExported: [{ state: "Massachusetts", department: "Quincy PD", total: 1 }],
-    });
-    const { featureTotals } = computeIntelligence(inputs, opts);
-    expect(featureTotals).toEqual({
-      questions: 100, documents: 40, signoffs: 12, workspace: 7,
-      formsEmailed: 5, aiFormsFilled: 2, artifactsExported: 1, redaction: 3,
-    });
+      formsEmailed: [
+        { state: "(none)", department: "Quincy PD", total: 45 }, // State-less — would be dropped by `kept`
+        { state: "Massachusetts", department: "Quincy PD", total: 5 },
+      ],
+      formsAiFilled: [{ state: "(none)", department: "Quincy PD", total: 12 }],
+    };
+    const totals = sumFeatureTotals(signals, true);
+    expect(totals.formsEmailed).toBe(50); // 45 (state-less) + 5 — not zeroed
+    expect(totals.aiFormsFilled).toBe(12);
+    expect(totals.questions).toBe(100);
+  });
+
+  it("excludes identifiable test/demo departments when hideTest is true, even without a real state", () => {
+    const signals = {
+      current: [{ state: "Massachusetts", department: "Quincy PD", total: 100 }],
+      prior: [],
+      formsEmailed: [
+        { state: "(none)", department: "Quincy PD", total: 45 },
+        { state: "(none)", department: "TEST E2E Department", total: 999 },
+      ],
+    };
+    expect(sumFeatureTotals(signals, true).formsEmailed).toBe(45);
+    expect(sumFeatureTotals(signals, false).formsEmailed).toBe(1044); // hideTest off → test dept counted too
   });
 });

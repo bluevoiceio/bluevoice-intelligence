@@ -5,6 +5,7 @@ import {
   buildAccountInputs,
   computeIntelligence,
   INTELLIGENCE_DEFAULTS,
+  sumFeatureTotals,
   type IntelligenceSignals,
 } from "@/lib/intelligence";
 import { trailingWindow } from "@/lib/query";
@@ -161,13 +162,18 @@ export async function GET(req: NextRequest) {
       signoffs: settledValue(settled[3]), // sign-offs also feed value-delivered
     };
 
-    const { accounts, summary, featureTotals } = computeIntelligence(buildAccountInputs(signals), {
+    const { accounts, summary } = computeIntelligence(buildAccountInputs(signals), {
       ...INTELLIGENCE_DEFAULTS,
       hideTest,
       // The floor is a minimum *absolute* prior-window volume, so it must scale
       // with the window or a longer window would mark far fewer accounts "no-read".
       floor: Math.round(INTELLIGENCE_DEFAULTS.floor * (windowDays / DEFAULT_WINDOW)),
     });
+
+    // Summed from the raw batches (not the state-joined `accounts`) so
+    // State-less outcome events (Form Emailed, AI Forms Filled, ...) aren't
+    // dropped by the state|department join — see sumFeatureTotals' doc.
+    const featureTotals = sumFeatureTotals(signals, hideTest);
 
     // Pillars whose fetch failed must read as "—", not "0% adopted".
     const unavailablePillars = [

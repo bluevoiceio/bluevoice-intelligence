@@ -108,7 +108,10 @@ export interface IntelligenceSummary {
 }
 
 /** Book-wide feature usage totals for the current window — powers the Act 3
- *  realization-gap funnel. Summed over the kept (filtered) accounts only. */
+ *  realization-gap funnel. Computed by `sumFeatureTotals` from the raw
+ *  per-event batches, not the state-joined accounts (see that function's doc
+ *  for why: several outcome events are State-less and would be dropped by
+ *  the state|department join). */
 export interface FeatureTotals {
   questions: number;
   documents: number;
@@ -369,6 +372,33 @@ export interface IntelligenceSignals {
   activatedOfficers?: StateDeptTotal[];
 }
 
+/** Book-wide feature totals for the realization funnel, summed from the RAW
+ *  per-event batches (not the state-joined accounts) so State-less events
+ *  like Form Emailed / AI Forms are not lost. Drops only identifiable test
+ *  departments; keeps (none)-state/(none)-dept rows (real, untagged usage). */
+export function sumFeatureTotals(signals: IntelligenceSignals, hideTest: boolean): FeatureTotals {
+  const sumBatch = (rows?: StateDeptTotal[]): number => {
+    if (!rows) return 0;
+    let t = 0;
+    for (const r of rows) {
+      const dept = r.department?.trim() ?? "";
+      if (hideTest && dept && dept !== NONE && isTestDepartment(dept)) continue;
+      t += r.total;
+    }
+    return t;
+  };
+  return {
+    questions: sumBatch(signals.current),
+    documents: sumBatch(signals.documents),
+    signoffs: sumBatch(signals.signoffs),
+    workspace: sumBatch(signals.workspace),
+    formsEmailed: sumBatch(signals.formsEmailed),
+    aiFormsFilled: sumBatch(signals.formsAiFilled),
+    artifactsExported: sumBatch(signals.artifactsExported),
+    redaction: sumBatch(signals.redaction),
+  };
+}
+
 function indexByKey(rows?: StateDeptTotal[]): Map<string, number> | undefined {
   if (!rows) return undefined;
   const m = new Map<string, number>();
@@ -514,7 +544,7 @@ export function recommend(a: AccountIntelligence): Recommendation {
 export function computeIntelligence(
   inputs: AccountInput[],
   opts: IntelligenceOptions,
-): { accounts: AccountIntelligence[]; summary: IntelligenceSummary; featureTotals: FeatureTotals } {
+): { accounts: AccountIntelligence[]; summary: IntelligenceSummary } {
   // Filter to real, displayable accounts first so the peer reference below is
   // computed over exactly the book we score (not test/demo or (none) rows).
   const kept = inputs.filter((a) => {
@@ -591,26 +621,11 @@ export function computeIntelligence(
     });
   }
 
-  const featureTotals: FeatureTotals = kept.reduce(
-    (t, a) => {
-      t.questions += a.current;
-      t.documents += a.pillars?.documents ?? 0;
-      t.workspace += a.pillars?.workspace ?? 0;
-      t.redaction += a.pillars?.redaction ?? 0;
-      t.signoffs += a.signoffs ?? 0;
-      t.formsEmailed += a.formsEmailed ?? 0;
-      t.aiFormsFilled += a.formsAiFilled ?? 0;
-      t.artifactsExported += a.artifactsExported ?? 0;
-      return t;
-    },
-    { questions: 0, documents: 0, signoffs: 0, workspace: 0, formsEmailed: 0, aiFormsFilled: 0, artifactsExported: 0, redaction: 0 },
-  );
-
   // Most at-risk first — leadership and CS read the top of the list.
   accounts.sort((x, y) => x.composite - y.composite);
 
   const bands: Record<Band, number> = { green: 0, yellow: 0, red: 0 };
   for (const a of accounts) bands[a.band] += 1;
 
-  return { accounts, summary: { total: accounts.length, bands }, featureTotals };
+  return { accounts, summary: { total: accounts.length, bands } };
 }
