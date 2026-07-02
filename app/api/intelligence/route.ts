@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
       signoffs: settledValue(settled[3]), // sign-offs also feed value-delivered
     };
 
-    const { accounts, summary } = computeIntelligence(buildAccountInputs(signals), {
+    const { accounts, summary, featureTotals } = computeIntelligence(buildAccountInputs(signals), {
       ...INTELLIGENCE_DEFAULTS,
       hideTest,
       // The floor is a minimum *absolute* prior-window volume, so it must scale
@@ -179,7 +179,7 @@ export async function GET(req: NextRequest) {
 
     // Summary always reflects the full book; an optional state only narrows rows.
     const rows = stateFilter ? accounts.filter((a) => a.state === stateFilter) : accounts;
-    return NextResponse.json({ accounts: rows, summary, unavailablePillars, window: windowDays });
+    return NextResponse.json({ accounts: rows, summary, featureTotals, unavailablePillars, window: windowDays });
   } catch (err) {
     return errorResponse(err);
   }
