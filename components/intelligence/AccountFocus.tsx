@@ -3,6 +3,7 @@
 import { recommend, type AccountIntelligence } from "@/lib/intelligence";
 import { LensGlyph } from "@/components/intelligence/LensGlyph";
 import {
+  ACCENT,
   bandColor,
   deltaPctLabel,
   LENSES,
@@ -111,7 +112,7 @@ export function AccountFocus({ account }: { account: AccountIntelligence | null 
               </div>
               <div className="mt-1 flex items-baseline gap-1.5">
                 <span className="text-sm font-medium text-foreground">Value delivered</span>
-                <span className="text-sm font-semibold tabular-nums" style={{ color: "#ec4899" }}>{account.lenses.realization}</span>
+                <span className="text-sm font-semibold tabular-nums" style={{ color: ACCENT.value }}>{account.lenses.realization}</span>
                 <span className="text-xs text-muted-foreground">/ 100</span>
               </div>
               <p className="mt-0.5 text-xs leading-snug text-muted-foreground/80">

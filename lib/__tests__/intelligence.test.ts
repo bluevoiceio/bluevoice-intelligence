@@ -163,22 +163,25 @@ describe("computeIntelligence — realization lens (outcomes shipped)", () => {
     expect(dense.lenses.realization!).toBeGreaterThan(sparse.lenses.realization!);
   });
 
-  it("grades value delivered on a curve vs peers, not a fixed target", () => {
-    // Most of the book ships nothing; two accounts ship, both BELOW the old
-    // fixed 0.1 target. Peer-relative grading should let the heavier shipper
-    // anchor near the top and credit the lighter one proportionally (not the
-    // ~60/~15 a fixed target would give).
+  it("grades value delivered on a curve vs peers — top shippers rank high, light ones get partial credit", () => {
+    // Most of the book ships nothing; several ship at a range of volumes. The
+    // heaviest shipper should rank near the top of the curve, the lightest
+    // should still get partial (non-zero) credit, and a non-shipper stays at 0.
     const zeros = Array.from({ length: 8 }, (_, i) =>
       acct({ state: "MA", department: `Zero ${i} PD`, current: 1000, prior: 1000, questions: 1000, formsEmailed: 0 }),
     );
-    const heavy = acct({ state: "MA", department: "Heavy PD", current: 1000, prior: 1000, questions: 1000, formsEmailed: 60 }); // density .060
-    const light = acct({ state: "MA", department: "Light PD", current: 1000, prior: 1000, questions: 1000, formsEmailed: 15 }); // density .015
-    const { accounts } = computeIntelligence([...zeros, heavy, light], opts);
-    const h = accounts.find((a) => a.department === "Heavy PD")!;
-    const l = accounts.find((a) => a.department === "Light PD")!;
-    expect(h.lenses.realization!).toBeGreaterThanOrEqual(85); // top shipper anchors high
-    expect(l.lenses.realization!).toBeGreaterThan(0); // partial credit, not floored away
-    expect(l.lenses.realization!).toBeLessThan(h.lenses.realization!);
+    // six shippers ramping light → heavy at the same usage (so volume ≈ density)
+    const shippers = [10, 18, 26, 34, 45, 80].map((n, i) =>
+      acct({ state: "MA", department: `Ship ${i} PD`, current: 1000, prior: 1000, questions: 1000, formsEmailed: n }),
+    );
+    const { accounts } = computeIntelligence([...zeros, ...shippers], opts);
+    const byDept = (d: string) => accounts.find((a) => a.department === d)!;
+    const heavy = byDept("Ship 5 PD"); // 80 forms — top on both volume and density
+    const light = byDept("Ship 0 PD"); // 10 forms — bottom shipper
+    expect(heavy.lenses.realization!).toBeGreaterThanOrEqual(85); // top shipper anchors high
+    expect(light.lenses.realization!).toBeGreaterThan(0); // partial credit, not floored away
+    expect(light.lenses.realization!).toBeLessThan(heavy.lenses.realization!);
+    expect(byDept("Zero 0 PD").lenses.realization!).toBe(0); // non-shippers stay at zero
   });
 
   it("counts compliance outcomes (signoffs, redactions) as value delivered", () => {
@@ -378,10 +381,11 @@ describe("recommend — the prescriptive 'so-what' next play per account", () =>
   });
 
   it("treats a strong, broad account as an expansion reference", () => {
-    // Needs low-volume peers so the all-star actually ranks HIGH on activity
-    // (a solo account gets only a neutral activity score).
+    // Needs lower-volume peers that also ship modestly, so the all-star ranks
+    // HIGH on both activity and value delivered (a solo account / solo shipper
+    // gets only a neutral score on those peer-ranked lenses).
     const peers = Array.from({ length: 5 }, (_, i) =>
-      acct({ state: "OH", department: `Small ${i} PD`, current: 5, prior: 5 }),
+      acct({ state: "OH", department: `Small ${i} PD`, current: 200, prior: 200, questions: 200, formsEmailed: 10 }),
     );
     const allstar = acct({
       state: "OH",

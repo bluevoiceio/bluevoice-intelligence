@@ -51,6 +51,17 @@ const ARTIFACT_EXPORTED_EVENT = "Artifact Exported";
  */
 const ENVLESS: Environment = "All";
 
+/** Preset comparison windows (days). The board compares a trailing window
+ *  against the prior equal-length window, so 30 = month-over-month, 90 =
+ *  quarter-over-quarter. Kept in sync with the client's WINDOW_OPTIONS. */
+const WINDOW_DAYS = [30, 90] as const;
+const DEFAULT_WINDOW = 30;
+
+function parseWindow(v: string | null): number {
+  const n = Number(v);
+  return (WINDOW_DAYS as readonly number[]).includes(n) ? n : DEFAULT_WINDOW;
+}
+
 const settledValue = (
   r: PromiseSettledResult<StateDeptTotal[]>,
 ): StateDeptTotal[] | undefined => (r.status === "fulfilled" ? r.value : undefined);
@@ -104,9 +115,10 @@ export async function GET(req: NextRequest) {
     const env: Environment = sp.get("env") === "All" ? "All" : "Prod";
     const hideTest = sp.get("hideTest") !== "0"; // default ON
     const stateFilter = sp.get("state")?.trim() || null;
+    const windowDays = parseWindow(sp.get("window"));
 
-    const cur = trailingWindow(30, 0);
-    const prev = trailingWindow(30, 30);
+    const cur = trailingWindow(windowDays, 0);
+    const prev = trailingWindow(windowDays, windowDays);
 
     // Must-haves: the momentum spine (current vs prior question totals). If these
     // fail the board can't render, so they throw out to errorResponse.
@@ -152,6 +164,9 @@ export async function GET(req: NextRequest) {
     const { accounts, summary } = computeIntelligence(buildAccountInputs(signals), {
       ...INTELLIGENCE_DEFAULTS,
       hideTest,
+      // The floor is a minimum *absolute* prior-window volume, so it must scale
+      // with the window or a longer window would mark far fewer accounts "no-read".
+      floor: Math.round(INTELLIGENCE_DEFAULTS.floor * (windowDays / DEFAULT_WINDOW)),
     });
 
     // Pillars whose fetch failed must read as "—", not "0% adopted".
@@ -164,7 +179,7 @@ export async function GET(req: NextRequest) {
 
     // Summary always reflects the full book; an optional state only narrows rows.
     const rows = stateFilter ? accounts.filter((a) => a.state === stateFilter) : accounts;
-    return NextResponse.json({ accounts: rows, summary, unavailablePillars });
+    return NextResponse.json({ accounts: rows, summary, unavailablePillars, window: windowDays });
   } catch (err) {
     return errorResponse(err);
   }

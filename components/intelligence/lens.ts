@@ -10,7 +10,39 @@
  * separately as expansion upside; onboarding is omitted — too sparse at the
  * department grain to populate.)
  */
-import type { AccountIntelligence, Band, LensScores } from "@/lib/intelligence";
+import { BAND_BREAKS, type AccountIntelligence, type Band, type LensScores } from "@/lib/intelligence";
+
+/**
+ * The Tailwind palette tokens the console draws from. SVG fills need literal
+ * colour strings (not utility classes), so we pin the exact Tailwind v4 hexes
+ * here in ONE place — change a token and it flows to every chart. Semantic
+ * health uses red / amber / emerald; categorical accents use blue / indigo /
+ * teal / violet / pink.
+ */
+const TW = {
+  red700: "#b91c1c",
+  red500: "#ef4444",
+  amber600: "#d97706",
+  amber500: "#f59e0b",
+  amber400: "#fbbf24",
+  emerald600: "#059669",
+  emerald500: "#10b981",
+  blue500: "#3b82f6",
+  indigo500: "#6366f1",
+  teal500: "#14b8a6",
+  violet500: "#8b5cf6",
+  pink500: "#ec4899",
+} as const;
+
+/** Public Tailwind tokens for callers outside the band system (e.g. the value
+ *  "upside" accent). Keeps every literal hex sourced from this file. */
+export const ACCENT = { signal: TW.blue500, value: TW.pink500 } as const;
+
+/** Build an `rgba()` string from one of the hex tokens above. */
+function rgba(hex: string, a: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
 
 export type LensKey = "activity" | "momentum" | "trust" | "realization" | "breadth" | "activation";
 
@@ -28,45 +60,53 @@ export interface LensDef {
 
 /**
  * Order is the polygon winding order: momentum at 12 o'clock, then clockwise
- * around an even pentagon (72° apart). Accents are a restrained, professional
- * categorical set (blue/indigo/rose/violet/teal).
+ * around an even pentagon (72° apart). Accents are Tailwind categorical tokens
+ * (blue-500 / indigo-500 / teal-500 / violet-500) — angle disambiguates the
+ * spokes, so close hues are fine and they stay clear of the semantic R/A/G band
+ * colours below.
  */
 export const LENSES: LensDef[] = [
-  { key: "activity", label: "Usage", short: "Usage", angle: 0, accent: "#3b82f6", blurb: "How much they use it, ranked against the rest of the book" },
-  { key: "momentum", label: "Trend", short: "Trend", angle: 90, accent: "#6366f1", blurb: "Usage direction — growing or shrinking vs last month" },
-  { key: "trust", label: "Answer quality", short: "Quality", angle: 180, accent: "#14b8a6", blurb: "Do officers trust the answers, or re-ask and downvote?" },
-  { key: "breadth", label: "Feature adoption", short: "Tools", angle: 270, accent: "#a855f7", blurb: "How many of the product's tools they actually use" },
+  { key: "activity", label: "Usage", short: "Usage", angle: 0, accent: TW.blue500, blurb: "How much they use it, ranked against the rest of the book" },
+  { key: "momentum", label: "Trend", short: "Trend", angle: 90, accent: TW.indigo500, blurb: "Usage direction — growing or shrinking vs last month" },
+  { key: "trust", label: "Answer quality", short: "Quality", angle: 180, accent: TW.teal500, blurb: "Do officers trust the answers, or re-ask and downvote?" },
+  { key: "breadth", label: "Feature adoption", short: "Tools", angle: 270, accent: TW.violet500, blurb: "How many of the product's tools they actually use" },
 ];
 
 // --- Band / composite color ramp --------------------------------------------
-// Calm, semantic health hexes shared with the app's viz.ts so the console reads
-// as part of the same product — not a neon one-off.
+// All hues are Tailwind tokens (see TW below) so the console reads as one
+// product and inherits Tailwind's perceptually-tuned ramps. Red→amber→green is
+// kept for its universal "health" semantics, but red (red-500) and green
+// (emerald-500) differ in LIGHTNESS as well as hue — the channel red/green
+// colour-blind viewers can still see — and every chart pairs band colour with a
+// redundant position encoding so no read depends on hue alone.
 
 const BAND: Record<Band, { solid: string; soft: string; glow: string; label: string }> = {
-  red: { solid: "#e5484d", soft: "rgba(229,72,77,0.12)", glow: "rgba(229,72,77,0.35)", label: "At risk" },
-  yellow: { solid: "#d9930a", soft: "rgba(217,147,10,0.12)", glow: "rgba(217,147,10,0.25)", label: "Watch" },
-  green: { solid: "#2bb673", soft: "rgba(43,182,115,0.12)", glow: "rgba(43,182,115,0.25)", label: "Healthy" },
+  red: { solid: TW.red500, soft: rgba(TW.red500, 0.12), glow: rgba(TW.red500, 0.35), label: "At risk" },
+  yellow: { solid: TW.amber500, soft: rgba(TW.amber500, 0.12), glow: rgba(TW.amber500, 0.28), label: "Watch" },
+  green: { solid: TW.emerald500, soft: rgba(TW.emerald500, 0.12), glow: rgba(TW.emerald500, 0.28), label: "Healthy" },
 };
 
 export function bandColor(band: Band) {
   return BAND[band];
 }
 
-/** Non-health accent for adoption bars (brand blue). */
-export const SIGNAL = "#3b82f6";
+/** Non-health accent for adoption bars (Tailwind blue-500). */
+export const SIGNAL = TW.blue500;
 
 /**
  * Composite color ramp — BAND-ALIGNED so a tile's hue always matches its score
- * and band badge. Each band keeps its own colour family across its score range
- * (red <40, amber 40–69, green ≥70), with a light→dark gradient *within* the
- * band for nuance. The hue flips exactly at the 40/70 band boundaries, the same
- * thresholds `bandFor`/`bandColor` use — so 62 reads amber (Watch), not green.
+ * and band badge. Each band keeps its own Tailwind colour family across its
+ * score range, with a light→dark gradient *within* the band for nuance. The hue
+ * flips EXACTLY at `BAND_BREAKS` (40 / 66) — the same thresholds `bandFor`
+ * uses — so 62 reads amber (Watch), not green, and the ramp can never drift
+ * from the band logic.
  */
 export function compositeRamp(score: number): string {
   const s = clamp(score, 0, 100);
-  if (s < 40) return lerpHex("#c0383c", "#e5484d", s / 40); // red band
-  if (s < 66) return lerpHex("#c9870a", "#e8b13a", (s - 40) / 26); // amber band
-  return lerpHex("#2bb673", "#1f9e63", (s - 66) / 34); // green band
+  const { yellow, green } = BAND_BREAKS;
+  if (s < yellow) return lerpHex(TW.red700, TW.red500, s / yellow); // red band
+  if (s < green) return lerpHex(TW.amber600, TW.amber400, (s - yellow) / (green - yellow)); // amber band
+  return lerpHex(TW.emerald500, TW.emerald600, (s - green) / (100 - green)); // green band
 }
 
 // --- Glyph geometry ----------------------------------------------------------

@@ -113,6 +113,8 @@ export interface IntelligenceResponse {
   summary: IntelligenceSummary;
   /** Pillar keys whose upstream fetch failed — shown as "—", never as 0%. */
   unavailablePillars?: string[];
+  /** Trailing comparison window in days (30 = MoM, 90 = QoQ). */
+  window?: number;
 }
 
 export interface IntelligenceOptions {
@@ -143,10 +145,6 @@ const PILLAR_W = { ask: 0.12, documents: 0.22, workspace: 0.22, redaction: 0.22,
 
 /** Activation rate that earns full marks. */
 const ACTIVATION_TARGET = 0.6;
-
-/** The percentile of the book's shippers that earns full value-delivered marks
- *  — graded on a curve vs peers rather than a guessed absolute target. */
-const REALIZATION_PCTL = 0.8;
 
 /**
  * Floor applied to each lens before geometric aggregation. A literal 0 in a
@@ -199,22 +197,33 @@ function momentumScore(deltaPct: number | null, status: HealthStatus): number {
 }
 
 /**
- * Activity / adoption level — where this account's current usage volume ranks
- * against the whole book (midrank percentile, 0–1). Captures the dimension the
- * rate-based lenses miss: a barely-used account has great rates (no decline, no
- * friction) but low absolute usage, which is the top churn signal. `sortedVols`
- * is the ascending list of every kept account's `current`.
+ * Midrank percentile of `value` within an ascending-sorted peer array (0–1).
+ * Ties share the average rank, so equal values score equally. Shared by the
+ * activity lens (rank usage vs the whole book) and the value-delivered lens
+ * (rank outcomes vs the book's shippers). A peerless value (n≤1) gets a neutral
+ * 0.6 rather than a degenerate 0 or 1.
  */
-function activityScore(current: number, sortedVols: number[]): number {
-  const n = sortedVols.length;
-  if (n <= 1) return 0.6; // a one-account book has no peers to rank against
+function midrankPercentile(value: number, sortedAsc: number[]): number {
+  const n = sortedAsc.length;
+  if (n <= 1) return 0.6; // no peers to rank against
   let below = 0;
   let equal = 0;
-  for (const v of sortedVols) {
-    if (v < current) below++;
-    else if (v === current) equal++;
+  for (const v of sortedAsc) {
+    if (v < value) below++;
+    else if (v === value) equal++;
   }
   return clamp01((below + equal / 2) / n);
+}
+
+/**
+ * Activity / adoption level — where this account's current usage volume ranks
+ * against the whole book. Captures the dimension the rate-based lenses miss: a
+ * barely-used account has great rates (no decline, no friction) but low absolute
+ * usage, which is the top churn signal. `sortedVols` is the ascending list of
+ * every kept account's `current`.
+ */
+function activityScore(current: number, sortedVols: number[]): number {
+  return midrankPercentile(current, sortedVols);
 }
 
 function trustScore(a: AccountInput): number | null {
@@ -252,13 +261,13 @@ function activationScore(a: AccountInput): number | null {
 }
 
 /**
- * Outcome density — shipped work products per question. Counts every concrete
- * deliverable: AI-filled & emailed forms, exported artifacts, redactions, and
- * policy sign-offs (the core accreditation outcome). Null only when no outcome
- * batch ran (so the lens reweights away cleanly); 0 outcomes against real usage
- * is a true zero (a "browser" account that never ships).
+ * Total concrete outcomes shipped this window — every deliverable that proves
+ * value: AI-filled & emailed forms, exported artifacts, policy sign-offs (the
+ * core accreditation outcome), and redactions. Null only when no outcome batch
+ * ran (so the lens reweights away cleanly); 0 is a true zero — a "browser"
+ * account that asks but never ships.
  */
-function realizationDensity(a: AccountInput): number | null {
+function outcomesShipped(a: AccountInput): number | null {
   if (
     a.formsAiFilled == null &&
     a.formsEmailed == null &&
@@ -266,47 +275,60 @@ function realizationDensity(a: AccountInput): number | null {
     a.signoffs == null
   )
     return null;
-  const outcomes =
+  return (
     (a.formsAiFilled ?? 0) +
     (a.formsEmailed ?? 0) +
     (a.artifactsExported ?? 0) +
     (a.signoffs ?? 0) +
-    (a.pillars?.redaction ?? 0);
-  const denom = a.questions ?? a.current;
-  if (denom <= 0) return outcomes > 0 ? Infinity : 0;
-  return outcomes / denom;
+    (a.pillars?.redaction ?? 0)
+  );
 }
 
 /**
- * Value-delivered score, graded on a curve against the book's own shippers:
- * full marks at `ref` (the REALIZATION_PCTL-percentile outcome density among
- * accounts that ship anything), linear below it. Replaces a guessed absolute
- * target so the lens self-calibrates and credits partial outcomes. Null when no
- * outcome data; 0 when nobody in the book ships.
+ * Conversion intensity — outcomes per question. A small, efficient agency
+ * scores high here even with modest absolute output. `max(denom, 1)` guards the
+ * zero-question edge so density can never blow up to Infinity (the old footgun
+ * that mapped a no-usage account straight to a perfect 100).
  */
-function realizationScore(a: AccountInput, ref: number): number | null {
-  const d = realizationDensity(a);
-  if (d == null) return null;
-  if (ref <= 0) return 0;
-  return clamp01(d / ref);
+function outcomeDensity(a: AccountInput, outcomes: number): number {
+  return outcomes / Math.max(a.questions ?? a.current, 1);
 }
 
-/** Linear-interpolated percentile of an ascending-sorted array (p in 0–1). */
-function percentile(sortedAsc: number[], p: number): number {
-  const n = sortedAsc.length;
-  if (n === 0) return 0;
-  if (n === 1) return sortedAsc[0];
-  const rank = p * (n - 1);
-  const lo = Math.floor(rank);
-  const hi = Math.ceil(rank);
-  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (rank - lo);
+/**
+ * Value-delivered score — a BLEND of two peer ranks among the book's shippers:
+ * how MUCH they ship (outcome volume) and how EFFICIENTLY they convert usage
+ * into outcomes (density). Geometric mean, so an account must be strong on BOTH
+ * to rank high — a tiny shop with a single form can't outrank a steady
+ * high-volume producer, and a high-volume producer can't coast on raw count.
+ * Percentile ranks spread evenly with no clamp pileup at 100; non-shippers
+ * score 0; null when no outcome batch ran. `sortedCounts` / `sortedDensities`
+ * are the ascending outcome-count and -density arrays over every shipper in the
+ * (filtered) book.
+ */
+function realizationScore(
+  a: AccountInput,
+  outcomes: number | null,
+  sortedCounts: number[],
+  sortedDensities: number[],
+): number | null {
+  if (outcomes == null) return null; // no outcome data → reweight away cleanly
+  if (outcomes <= 0) return 0; // batch ran, but nothing shipped — a true zero
+  const countRank = midrankPercentile(outcomes, sortedCounts);
+  const densityRank = midrankPercentile(outcomeDensity(a, outcomes), sortedDensities);
+  return Math.sqrt(countRank * densityRank);
 }
+
+/** Numeric band boundaries on the 0–100 composite scale — the SINGLE source of
+ *  truth for every band edge in the app. `bandFor`, `compositeRamp`, and any
+ *  chart that shades band zones must read these so the dot color and the band
+ *  wash can never disagree (they once did: the spread hardcoded 40/75). */
+export const BAND_BREAKS = { yellow: 40, green: 66 } as const;
 
 /** Single source of truth for score→band. Green ≥66 (calibrated to the live
  *  engagement-health distribution), yellow 40–65, red <40. */
 export function bandFor(composite: number): Band {
-  if (composite >= 66) return "green";
-  if (composite >= 40) return "yellow";
+  if (composite >= BAND_BREAKS.green) return "green";
+  if (composite >= BAND_BREAKS.yellow) return "yellow";
   return "red";
 }
 
@@ -490,13 +512,14 @@ export function computeIntelligence(
     return true;
   });
 
-  // Value-delivered reference: the REALIZATION_PCTL-percentile outcome density
-  // among accounts that ship anything, so the lens grades on a curve vs peers.
-  const positiveDensities = kept
-    .map(realizationDensity)
-    .filter((d): d is number => d != null && d > 0 && Number.isFinite(d))
-    .sort((x, y) => x - y);
-  const realizationRef = percentile(positiveDensities, REALIZATION_PCTL);
+  // Value-delivered reference: outcome COUNT and DENSITY over every shipper, so
+  // the lens ranks each account on both volume and conversion vs its peers
+  // (graded on the book's own curve, not a guessed absolute target).
+  const shippers = kept
+    .map((a) => ({ a, out: outcomesShipped(a) }))
+    .filter((x): x is { a: AccountInput; out: number } => x.out != null && x.out > 0);
+  const sortedCounts = shippers.map((x) => x.out).sort((p, q) => p - q);
+  const sortedDensities = shippers.map((x) => outcomeDensity(x.a, x.out)).sort((p, q) => p - q);
 
   // Activity reference: every account's usage volume, for percentile ranking.
   const sortedVols = kept.map((a) => a.current).sort((x, y) => x - y);
@@ -514,7 +537,7 @@ export function computeIntelligence(
     const m = momentumScore(deltaPct, status);
     const t = trustScore(a);
     const { score: b, used } = breadthScore(a.pillars);
-    const r = realizationScore(a, realizationRef);
+    const r = realizationScore(a, outcomesShipped(a), sortedCounts, sortedDensities);
     const act = activationScore(a);
 
     // Health = engagement & satisfaction only (usage, answer quality, feature
