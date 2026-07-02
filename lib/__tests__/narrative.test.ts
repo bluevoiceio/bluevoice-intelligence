@@ -71,4 +71,16 @@ describe("buildNarrative", () => {
     expect(n.thesis.length).toBeGreaterThan(0);
     expect(n.act1).not.toMatch(/undefined|NaN/);
   });
+
+  it("uses quarter-over-quarter phrasing at a 90d window", () => {
+    const n = buildNarrative(resp({ window: 90 }));
+    expect(n.act2).toContain("quarter-over-quarter");
+    const questionsStat = n.coverStats.find((s) => s.label.includes("questions"));
+    expect(questionsStat?.label).toContain("/ qtr");
+  });
+
+  it("uses month-over-month phrasing at a 30d window", () => {
+    const n = buildNarrative(resp({ window: 30 }));
+    expect(n.act2).toContain("month-over-month");
+  });
 });

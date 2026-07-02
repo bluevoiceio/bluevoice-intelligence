@@ -13,6 +13,7 @@ const CLIFF_FRAC = 0.05;
 
 export function RealizationGap({ totals }: { totals?: FeatureTotals }) {
   const bars = useMemo(() => (totals ? funnelBars(totals) : []), [totals]);
+  if (bars.length === 0) return null;
 
   return (
     <Card className="flex-[1.3]">

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { bandColor } from "@/components/intelligence/lens";
+import { ACCENT, bandColor } from "@/components/intelligence/lens";
 import { Card, CardContent } from "@/components/ui/card";
 import { fmt } from "@/lib/format";
 import type { AccountIntelligence } from "@/lib/intelligence";
@@ -17,7 +17,7 @@ export function MomentumLedger({ accounts }: { accounts: AccountIntelligence[] }
   const rows = [
     { label: "Gaining", value: counts.riser, color: bandColor("green").solid },
     { label: "Sliding", value: counts.decliner, color: bandColor("red").solid },
-    { label: "New", value: counts.new, color: bandColor("yellow").solid },
+    { label: "New", value: counts.new, color: ACCENT.signal },
     { label: "Steady", value: counts.stable, color: "var(--muted-foreground)" },
   ];
 

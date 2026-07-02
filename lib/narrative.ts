@@ -20,6 +20,7 @@ export interface BookSignals {
   decliners: number;
   premiumReachPct: number;
   topState: { state: string; share: number } | null;
+  window: number;
 }
 
 export interface StatLine {
@@ -68,7 +69,15 @@ export function deriveSignals(data: IntelligenceResponse): BookSignals {
   return {
     total, atRisk, atRiskShare: total ? atRisk / total : 0, medianHealth,
     questionVolume, volumeDeltaPct, risers, decliners, premiumReachPct, topState,
+    window: data.window ?? 30,
   };
+}
+
+/** Window-aware phrasing — 90d compares quarter-over-quarter, everything shorter is monthly. */
+function periodWords(window: number): { mom: string; period: string; rate: string } {
+  return window >= 90
+    ? { mom: "quarter-over-quarter", period: "this quarter", rate: "/ qtr" }
+    : { mom: "month-over-month", period: "this month", rate: "/ mo" };
 }
 
 interface ThesisRule {
@@ -85,7 +94,7 @@ const THESES: ThesisRule[] = [
     when: (s) => s.atRiskShare > 0.4 || s.medianHealth < 45,
     thesis: "The book is softening.",
     verdict: (s) =>
-      `${fmt(s.atRisk)} departments are at risk and the median scores ${s.medianHealth}/100 — retention is the story this month.`,
+      `${fmt(s.atRisk)} departments are at risk and the median scores ${s.medianHealth}/100 — retention is the story ${periodWords(s.window).period}.`,
   },
   {
     when: (s) => s.premiumReachPct < 0.1 && s.questionVolume > HIGH_VOLUME,
@@ -123,7 +132,7 @@ function act1Caption(s: BookSignals, accounts: AccountIntelligence[]): string {
 function act2Caption(s: BookSignals): string {
   const dir = (s.volumeDeltaPct ?? 0) >= 0 ? "up" : "down";
   const vol = s.volumeDeltaPct == null ? "" : ` Volume is ${dir} ${fmtPct(Math.abs(s.volumeDeltaPct))}.`;
-  return `${fmt(s.risers)} accounts are gaining and ${fmt(s.decliners)} are sliding month-over-month.${vol}`;
+  return `${fmt(s.risers)} accounts are gaining and ${fmt(s.decliners)} are sliding ${periodWords(s.window).mom}.${vol}`;
 }
 
 function act3Caption(s: BookSignals, trends?: TrendSeries[]): string {
@@ -151,7 +160,7 @@ export function buildNarrative(data: IntelligenceResponse, trends?: TrendSeries[
   const s = deriveSignals(data);
   const { thesis, verdict } = selectThesis(s);
   const coverStats: StatLine[] = [
-    { value: fmtCompact(s.questionVolume), label: "questions / mo" },
+    { value: fmtCompact(s.questionVolume), label: `questions ${periodWords(s.window).rate}` },
     { value: fmtPct(s.premiumReachPct), label: "reach premium" },
     { value: `${s.medianHealth}`, label: "median health" },
   ];
