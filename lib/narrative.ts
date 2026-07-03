@@ -19,6 +19,9 @@ export interface BookSignals {
   risers: number;
   decliners: number;
   premiumReachPct: number;
+  /** AI-differentiated outcomes (forms filled + exports + redactions) as a share
+   *  of question volume — the true "is the AI edge being realized?" signal. */
+  aiEdgeShare: number;
   topState: { state: string; share: number } | null;
   window: number;
 }
@@ -62,13 +65,18 @@ export function deriveSignals(data: IntelligenceResponse): BookSignals {
   const decliners = accounts.filter((a) => a.status === "decliner").length;
   const premiumReachPct = total ? accounts.filter(usesPremium).length / total : 0;
 
+  const ft = data.featureTotals;
+  const aiEdgeShare = ft && questionVolume > 0
+    ? (ft.aiFormsFilled + ft.artifactsExported + ft.redaction) / questionVolume
+    : 0;
+
   const states = sumByState(accounts);
   const stateTotal = states.reduce((s, x) => s + x.value, 0);
   const topState = states.length && stateTotal > 0 ? { state: states[0].state, share: states[0].value / stateTotal } : null;
 
   return {
     total, atRisk, atRiskShare: total ? atRisk / total : 0, medianHealth,
-    questionVolume, volumeDeltaPct, risers, decliners, premiumReachPct, topState,
+    questionVolume, volumeDeltaPct, risers, decliners, premiumReachPct, aiEdgeShare, topState,
     window: data.window ?? 30,
   };
 }
@@ -97,10 +105,10 @@ const THESES: ThesisRule[] = [
       `${fmt(s.atRisk)} departments are at risk and the median scores ${s.medianHealth}/100 — retention is the story ${periodWords(s.window).period}.`,
   },
   {
-    when: (s) => s.premiumReachPct < 0.1 && s.questionVolume > HIGH_VOLUME,
+    when: (s) => s.aiEdgeShare < 0.03 && s.questionVolume > HIGH_VOLUME,
     thesis: "Deep adoption, under-realized value.",
     verdict: (s) =>
-      `Officers lean on Blue Voice every day, but the AI-differentiated workflow reaches just ${fmtPct(s.premiumReachPct)} of the book — that gap is the runway.`,
+      `Officers lean on Blue Voice every day, but its AI-differentiated output — filled forms, redactions, exports — runs at just ${fmtPct(s.aiEdgeShare)} of ask volume. That gap is the runway.`,
   },
   {
     when: (s) => (s.volumeDeltaPct ?? 0) > 0.1 && s.risers > s.decliners,
@@ -136,7 +144,7 @@ function act2Caption(s: BookSignals): string {
 }
 
 function act3Caption(s: BookSignals, trends?: TrendSeries[]): string {
-  const base = `Officers ask constantly but ship little — the AI-differentiated features reach just ${fmtPct(s.premiumReachPct)} of the book.`;
+  const base = `Officers ask constantly but ship little — the AI-differentiated outcomes run at just ${fmtPct(s.aiEdgeShare)} of ask volume.`;
   const hi = trendHighlight(trends);
   return hi ? `${base} ${hi}` : base;
 }
@@ -153,7 +161,8 @@ function trendHighlight(trends?: TrendSeries[]): string | null {
     if (!best || ratio > best.ratio) best = { event: t.event, ratio };
   }
   if (!best || best.ratio < 1.5) return null;
-  return `${best.event} is up ~${Math.round(best.ratio)}× over six months — part of the runway is already lifting off.`;
+  const name = best.event.replace(/ (Sent|Successfully|Created)$/, "");
+  return `${name} is up ~${Math.round(best.ratio)}× over six months — part of the runway is already lifting off.`;
 }
 
 export function buildNarrative(data: IntelligenceResponse, trends?: TrendSeries[]): Narrative {
@@ -161,7 +170,7 @@ export function buildNarrative(data: IntelligenceResponse, trends?: TrendSeries[
   const { thesis, verdict } = selectThesis(s);
   const coverStats: StatLine[] = [
     { value: fmtCompact(s.questionVolume), label: `questions ${periodWords(s.window).rate}` },
-    { value: fmtPct(s.premiumReachPct), label: "reach premium" },
+    { value: fmtPct(s.aiEdgeShare), label: "of asks ship AI output" },
     { value: `${s.medianHealth}`, label: "median health" },
   ];
   return {
