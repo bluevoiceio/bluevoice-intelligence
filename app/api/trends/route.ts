@@ -12,7 +12,9 @@ export const revalidate = 600;
  *  they must be queried on "All" (see the pillar-env caveat). */
 const PREMIUM_EVENTS = ["Workspace Chat Sent", "Form Emailed Successfully", "Redaction Created", "AI Forms Filled Successfully"];
 
-const TREND_DAYS = 180;
+// ~7 months of daily data so that, after getEventTrend drops the current
+// still-incomplete month, six whole-ish months remain for the sparklines.
+const TREND_DAYS = 210;
 
 export async function GET() {
   try {

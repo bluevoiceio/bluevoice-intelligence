@@ -184,5 +184,11 @@ export async function getEventTrend(
   });
   const { parsed, xValues } = parseSegmentation(raw);
   const daily = parsed[0]?.series ?? [];
-  return { event: opts.event, points: bucketDailyToMonthly(daily, xValues, 6) };
+  // Drop the current, still-incomplete calendar month: a 2-day partial bucket
+  // reads as a cliff and would flip every rising trend to "slipping". Bucket
+  // everything, remove the current month, then keep the last 6 whole-ish months.
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const months = bucketDailyToMonthly(daily, xValues, 24).filter((p) => p.month !== currentMonth);
+  return { event: opts.event, points: months.slice(-6) };
 }
