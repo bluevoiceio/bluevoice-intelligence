@@ -56,12 +56,8 @@ export function IntelConsole() {
           <Skeleton className="h-[460px] w-full rounded-xl" />
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-4 lg:flex-row">
-              <div className="flex-[1.2]">
-                <IntelMap accounts={accounts} onHover={onHover} />
-              </div>
-              <ConcentrationCurve accounts={accounts} />
-            </div>
+            <IntelMap accounts={accounts} onHover={onHover} />
+            <ConcentrationCurve accounts={accounts} />
             <IntelTreemap accounts={accounts} onHover={onHover} />
           </div>
         )}
@@ -71,10 +67,10 @@ export function IntelConsole() {
         {isLoading ? (
           <Skeleton className="h-[220px] w-full rounded-xl" />
         ) : (
-          <div className="flex flex-col gap-4 lg:flex-row">
+          <div className="flex flex-col gap-4">
             <MomentumLedger accounts={accounts} />
-            <MoversSlope movers={narrative?.movers ?? { risers: [], fallers: [] }} />
-            <HealthDistribution accounts={accounts} />
+            <MoversSlope accounts={accounts} onHover={onHover} />
+            <HealthDistribution accounts={accounts} onHover={onHover} />
           </div>
         )}
       </Act>
@@ -83,10 +79,10 @@ export function IntelConsole() {
         {isLoading ? (
           <Skeleton className="h-[360px] w-full rounded-xl" />
         ) : (
-          <div className="flex flex-col gap-4 lg:flex-row">
+          <div className="flex flex-col gap-4">
             <RealizationGap totals={data?.featureTotals} />
-            <WhitespaceMatrix accounts={accounts} unavailable={data?.unavailablePillars ?? []} onHover={onHover} />
             <AdoptionTrend series={trends?.series} />
+            <WhitespaceMatrix accounts={accounts} unavailable={data?.unavailablePillars ?? []} onHover={onHover} />
           </div>
         )}
       </Act>

@@ -1,45 +1,112 @@
 "use client";
 
+import { useMemo } from "react";
+
+import type { AccountIntelligence } from "@/lib/intelligence";
+import { LensGlyph } from "@/components/intelligence/LensGlyph";
 import { bandColor } from "@/components/intelligence/lens";
-import { Card, CardContent } from "@/components/ui/card";
-import type { Mover } from "@/lib/charts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fmtCompact } from "@/lib/format";
 
-const W = 320;
-const H = 200;
+const N = 6;
 
-/** Diverging bars: risers (green, right) and fallers (red, left) by MoM %. */
-export function MoversSlope({ movers }: { movers: { risers: Mover[]; fallers: Mover[] } }) {
-  const rows = [
-    ...movers.fallers.map((m) => ({ ...m, up: false })),
-    ...movers.risers.map((m) => ({ ...m, up: true })),
-  ];
-  const max = Math.max(1, ...rows.map((r) => Math.abs(r.deltaPct)));
-  const mid = W / 2;
-  const barH = 18;
+/**
+ * Biggest movers — the book in motion. Two ranked columns (gaining / sliding vs
+ * the prior window, by question volume) where each row is a live account: its
+ * health glyph, a swing bar scaled to the largest move on screen, prior→current
+ * volume, and the shared hover card on hover.
+ */
+export function MoversSlope({
+  accounts,
+  onHover,
+}: {
+  accounts: AccountIntelligence[];
+  onHover?: (a: AccountIntelligence | null, e?: React.MouseEvent) => void;
+}) {
+  const { risers, fallers, max } = useMemo(() => {
+    const withDelta = accounts.filter(
+      (a): a is AccountIntelligence & { deltaPct: number } => a.deltaPct != null,
+    );
+    const risers = withDelta.filter((a) => a.deltaPct > 0).sort((x, y) => y.deltaPct - x.deltaPct).slice(0, N);
+    const fallers = withDelta.filter((a) => a.deltaPct < 0).sort((x, y) => x.deltaPct - y.deltaPct).slice(0, N);
+    const max = Math.max(1, ...risers.map((a) => a.deltaPct), ...fallers.map((a) => Math.abs(a.deltaPct)));
+    return { risers, fallers, max };
+  }, [accounts]);
 
   return (
-    <Card className="flex-1">
-      <CardContent className="p-4">
-        <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-          Biggest movers — MoM %
-        </p>
-        <svg viewBox={`0 0 ${W} ${Math.max(H, rows.length * (barH + 8) + 12)}`} width="100%" role="img" aria-label="Biggest movers">
-          <line x1={mid} y1={0} x2={mid} y2="100%" stroke="currentColor" opacity={0.15} />
-          {rows.map((r, i) => {
-            const y = 8 + i * (barH + 8);
-            const len = (Math.abs(r.deltaPct) / max) * (mid - 60);
-            const color = bandColor(r.up ? "green" : "red").solid;
-            return (
-              <g key={`${r.usps}-${r.department}`}>
-                <rect x={r.up ? mid : mid - len} y={y} width={len} height={barH} rx={3} fill={color} opacity={0.85} />
-                <text x={r.up ? mid + len + 5 : mid - len - 5} y={y + barH / 2 + 3} textAnchor={r.up ? "start" : "end"} fontSize={10} fill="currentColor">
-                  {r.department} {r.deltaPct > 0 ? "+" : "−"}{Math.abs(Math.round(r.deltaPct))}%
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+    <Card>
+      <CardHeader>
+        <CardTitle>Biggest movers</CardTitle>
+        <CardDescription>
+          Departments gaining and sliding versus the prior window, by question volume. Hover any row for its signature.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
+        <MoverColumn title="Gaining" dir="up" rows={risers} max={max} onHover={onHover} />
+        <MoverColumn title="Sliding" dir="down" rows={fallers} max={max} onHover={onHover} />
       </CardContent>
     </Card>
+  );
+}
+
+function MoverColumn({
+  title,
+  dir,
+  rows,
+  max,
+  onHover,
+}: {
+  title: string;
+  dir: "up" | "down";
+  rows: AccountIntelligence[];
+  max: number;
+  onHover?: (a: AccountIntelligence | null, e?: React.MouseEvent) => void;
+}) {
+  const color = bandColor(dir === "up" ? "green" : "red").solid;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="mb-1 flex items-center gap-1.5 border-b pb-1.5">
+        <span aria-hidden style={{ color }}>{dir === "up" ? "▲" : "▼"}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color }}>{title}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">None this window.</p>
+      ) : (
+        rows.map((a) => {
+          const d = a.deltaPct ?? 0;
+          const frac = Math.abs(d) / max;
+          const delta = Math.round(d);
+          return (
+            <button
+              key={`${a.usps}-${a.department}`}
+              type="button"
+              onMouseEnter={(e) => onHover?.(a, e)}
+              onMouseMove={(e) => onHover?.(a, e)}
+              onMouseLeave={() => onHover?.(null)}
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-accent"
+            >
+              <LensGlyph lenses={a.lenses} band={a.band} size={28} className="shrink-0" />
+              <span className="min-w-0">
+                <span className="flex items-baseline gap-1.5">
+                  <span className="truncate text-[13px] font-medium">{a.department}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{a.usps}</span>
+                </span>
+                <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-muted">
+                  <span className="block h-full rounded-full" style={{ width: `${Math.max(frac * 100, 4)}%`, background: color }} />
+                </span>
+              </span>
+              <span className="flex shrink-0 flex-col items-end">
+                <span className="text-sm font-semibold tabular-nums" style={{ color }}>
+                  {delta > 0 ? "+" : "−"}{Math.abs(delta)}%
+                </span>
+                <span className="font-mono text-[9px] text-muted-foreground">
+                  {fmtCompact(a.prior)}→{fmtCompact(a.current)}
+                </span>
+              </span>
+            </button>
+          );
+        })
+      )}
+    </div>
   );
 }
