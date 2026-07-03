@@ -15,10 +15,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+
+const title = "Blue Voice · Account Intelligence";
+const description =
+  "Internal analytics: department health, momentum, and expansion upside across the Blue Voice book — powered by Amplitude.";
+
 export const metadata: Metadata = {
-  title: "Blue Voice · Geographic Explorer",
-  description:
-    "Internal analytics: Blue Voice product usage shaded across the United States.",
+  metadataBase: new URL(siteUrl),
+  title,
+  description,
+  alternates: {
+    canonical: "/",
+  },
+  // Internal tool over anonymized officer data — never meant to be publicly indexed.
+  robots: {
+    index: false,
+    follow: false,
+  },
+  openGraph: {
+    title,
+    description,
+    url: "/",
+    siteName: "Blue Voice Account Intelligence",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export default function RootLayout({
